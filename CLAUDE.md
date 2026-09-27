@@ -42,10 +42,17 @@ ssh snadboy@homeassistant "cd /config/custom_components && tar xzf /tmp/sbf.tgz 
 ```
 Then a FULL restart (a config-entry reload does not re-import Python).
 
-## 0.1.1 (2026-09-27) — registry iteration
+## 0.1.1 → 0.1.2 (2026-09-27) — registry iteration, and an outage I caused
 
-HA 2026.9 logs a deprecation for `dev_reg.devices.values()` (mapping API on
-the registry containers goes away 2027.9): iterate the containers instead
-(`for d in dev_reg.devices`, same for `ent_reg.entities`). Verified after
-restart: no warning, `labels: [matter_hub]` still resolves the six outlets
-through their devices.
+HA 2026.9 reports mapping-style use of `DeviceRegistry.devices` (`.values()`,
+`[]`, `.get()`; removed 2027.9). The `devices` property is a deprecation
+VIEW whose ITERATION yields `DeviceEntry` values — `for d in dev_reg.devices`
+is the supported form. `EntityRegistry.entities` is NOT a view: it is a
+plain `UserDict`, iteration yields KEYS, `.values()` stays.
+
+0.1.1 changed both to iteration → `e.entity_id` on a str → every
+`build_snapshot` raised → every card and every rule dead for ~4 min (160
+tracebacks) until the revert. 0.1.2 = devices iterate, entities `.values()`.
+Verified: no deprecation line after restart, `labels: [matter_hub]` → 6.
+Lesson: read the deprecation's SOURCE (the docstring says exactly which
+form is supported) before changing two containers on one warning.

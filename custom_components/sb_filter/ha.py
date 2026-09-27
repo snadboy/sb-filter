@@ -45,9 +45,12 @@ def build_snapshot(hass: HomeAssistant) -> Snapshot:
     }
     entities = {
         e.entity_id: EntityRow(device_id=e.device_id, area_id=e.area_id, labels=tuple(e.labels))
-        for e in ent_reg.entities
+        for e in ent_reg.entities.values()
     }
-    # iterate the registry containers (HA deprecates the mapping API on them, 2027.9)
+    # `DeviceRegistry.devices` is a deprecation view (HA 2026.9 → removed 2027.9):
+    # ITERATING it yields DeviceEntry values and is the supported form; any
+    # mapping access (.values(), [], .get()) is reported. `EntityRegistry.entities`
+    # is a plain container whose iteration yields KEYS — keep .values() there.
     devices = {d.id: DeviceRow(area_id=d.area_id, labels=tuple(d.labels)) for d in dev_reg.devices}
     cache = _fmt_cache(hass)
     if len(cache) > 5000:
