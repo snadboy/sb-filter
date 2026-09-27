@@ -41,3 +41,11 @@ ssh snadboy@homeassistant "cat > /tmp/sbf.tgz" < /tmp/sbf.tgz
 ssh snadboy@homeassistant "cd /config/custom_components && tar xzf /tmp/sbf.tgz && rm /tmp/sbf.tgz"
 ```
 Then a FULL restart (a config-entry reload does not re-import Python).
+
+## 0.1.1 (2026-09-27) — registry iteration
+
+HA 2026.9 logs a deprecation for `dev_reg.devices.values()` (mapping API on
+the registry containers goes away 2027.9): iterate the containers instead
+(`for d in dev_reg.devices`, same for `ent_reg.entities`). Verified after
+restart: no warning, `labels: [matter_hub]` still resolves the six outlets
+through their devices.
