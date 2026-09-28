@@ -105,3 +105,12 @@ signal (`SIGNAL_SUBS`) refreshes the sensor on start/stop/push. Origins:
 WS `subscribe` takes an optional `origin` and appends the connection's
 user name ("card: Lights on · Dan"); sb_watch passes "rule: <name>".
 SERVICE device "SB Filter"; sensor platform via the config entry.
+
+## 0.4.1 — rate buffers released when the last rate filter stops (2026-09-28)
+
+User asked about aging/removal. Subscriptions need none: card entries die
+with their WebSocket connection (verified: raw socket subscribe → close →
+gone), rule entries with the config entry; HA's ping/pong reaps dead
+connections. The one accumulation was `RateTracker` buffers (entity set
+never shrank). Now `release_all()` when the last rate-bearing subscription
+stops; the next rate filter re-seeds from the recorder.

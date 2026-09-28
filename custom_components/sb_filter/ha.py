@@ -87,6 +87,17 @@ class RateTracker:
     def samples(self, entity_id: str, window: float) -> list[tuple[datetime, float]]:
         return list(self.buffers.get(entity_id, ()))
 
+    @callback
+    def release_all(self) -> None:
+        """No live filter uses a rate any more: drop every buffer and stop listening.
+        The next rate filter re-seeds from the recorder, so nothing is lost."""
+        self.buffers.clear()
+        self.window.clear()
+        self._seeded.clear()
+        if self._unsub:
+            self._unsub()
+            self._unsub = None
+
     def _listen(self) -> None:
         if self._unsub is None:
             self._unsub = self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._on_state)
@@ -348,6 +359,8 @@ class FilterSubscription:
             self._pending()
             self._pending = None
         if live_subscriptions(self.hass).pop(self.id, None) is not None:
+            if self.filter.rates and not any(s.filter.rates for s in live_subscriptions(self.hass).values()):
+                rate_tracker(self.hass).release_all()      # the last rate filter just left
             async_dispatcher_send(self.hass, SIGNAL_SUBS)
 
     def describe(self) -> dict[str, Any]:
