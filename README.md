@@ -11,7 +11,7 @@ labels: [matter_hub]        # the entity's own labels or its device's
 areas: [kitchen]
 device_classes: [battery]
 units: ["%"]
-states: [unavailable, "<20", "40-60"]   # values or ranges, ORed
+states: [unavailable, 100, "<20", "40-60"]   # words, numeric equality, ranges — ORed
 state_for: 2h               # in the current state for at least…
 ```
 
@@ -30,6 +30,7 @@ to configure. Integrations that depend on it list `sb_filter` in their manifest.
 |---|---|---|
 | `sb_filter/match` | `config` | `{ids, pattern_counts, configured, unreadable, grammar}` |
 | `sb_filter/subscribe` | `config` | the same payload as an event, first immediately and then whenever `ids` change |
+| `sb_filter/values` | `config` | the vocabulary of the entities the non-state fields select — `[{value, label, current, possible}]` — for an editor's chips |
 | `sb_filter/info` | — | `{grammar}` |
 
 State changes and registry edits coalesce into one recompute per second; a

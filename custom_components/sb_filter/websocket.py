@@ -8,7 +8,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from .const import GRAMMAR_VERSION
-from .ha import FilterSubscription, match_now, result_payload
+from .ha import FilterSubscription, match_now, result_payload, values_now
 
 
 @websocket_api.websocket_command({vol.Required("type"): "sb_filter/match", vol.Required("config"): dict})
@@ -29,6 +29,13 @@ def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection
     sub.start()
 
 
+@websocket_api.websocket_command({vol.Required("type"): "sb_filter/values", vol.Required("config"): dict})
+@callback
+def ws_values(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """The vocabulary of the entities the filter's non-state categories select, with counts."""
+    connection.send_result(msg["id"], {"values": values_now(hass, msg["config"]), "grammar": GRAMMAR_VERSION})
+
+
 @websocket_api.websocket_command({vol.Required("type"): "sb_filter/info"})
 @callback
 def ws_info(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
@@ -39,4 +46,5 @@ def ws_info(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
 def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_match)
     websocket_api.async_register_command(hass, ws_subscribe)
+    websocket_api.async_register_command(hass, ws_values)
     websocket_api.async_register_command(hass, ws_info)

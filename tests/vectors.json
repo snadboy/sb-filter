@@ -1,5 +1,5 @@
 {
- "grammar": 1,
+ "grammar": 2,
  "snapshot": {
   "now": "2026-09-27T12:00:00+00:00",
   "states": {
@@ -55,7 +55,7 @@
     "last_changed": "2026-09-27T11:59:40+00:00"
    },
    "sensor.kitchen_fp300_battery": {
-    "state": "100",
+    "state": "100.0",
     "attributes": {
      "friendly_name": "Kitchen FP300 Battery",
      "device_class": "battery",
@@ -133,6 +133,13 @@
     "state": "5",
     "attributes": {
      "friendly_name": "MTR thing"
+    },
+    "last_changed": "2026-09-27T11:58:20+00:00"
+   },
+   "sensor.string_hundred": {
+    "state": "one hundred",
+    "attributes": {
+     "friendly_name": "Word Hundred"
     },
     "last_changed": "2026-09-27T11:58:20+00:00"
    }
@@ -235,6 +242,94 @@
    "sun.sun": "Below horizon",
    "switch.nest_outlet_office": "Unavailable",
    "sensor.garage_battery": "Unavailable"
+  },
+  "vocabulary": {
+   "binary_sensor.kitchen_fp300_occupancy": [
+    [
+     "on",
+     "Detected"
+    ],
+    [
+     "off",
+     "Clear"
+    ]
+   ],
+   "binary_sensor.bath_fp300_occupancy": [
+    [
+     "on",
+     "Detected"
+    ],
+    [
+     "off",
+     "Clear"
+    ]
+   ],
+   "light.kitchen": [
+    [
+     "on",
+     "On"
+    ],
+    [
+     "off",
+     "Off"
+    ]
+   ],
+   "light.office": [
+    [
+     "on",
+     "On"
+    ],
+    [
+     "off",
+     "Off"
+    ]
+   ],
+   "light.hall": [
+    [
+     "on",
+     "On"
+    ],
+    [
+     "off",
+     "Off"
+    ]
+   ],
+   "switch.nest_outlet_bedroom": [
+    [
+     "on",
+     "On"
+    ],
+    [
+     "off",
+     "Off"
+    ]
+   ],
+   "switch.nest_outlet_office": [
+    [
+     "on",
+     "On"
+    ],
+    [
+     "off",
+     "Off"
+    ]
+   ],
+   "sun.sun": [
+    [
+     "above_horizon",
+     "Above horizon"
+    ],
+    [
+     "below_horizon",
+     "Below horizon"
+    ]
+   ],
+   "sensor.battery_type": [
+    [
+     "CR2450",
+     null
+    ]
+   ]
   }
  },
  "cases": [
@@ -754,6 +849,191 @@
    "expect_ids": [
     "sensor.bath_fp300_battery"
    ]
+  },
+  {
+   "name": "v2 numeric equality: 100 matches 100.0",
+   "config": {
+    "device_classes": [
+     "battery"
+    ],
+    "states": [
+     "100"
+    ]
+   },
+   "expect_ids": [
+    "sensor.kitchen_fp300_battery"
+   ]
+  },
+  {
+   "name": "v2 numeric equality as a number, with a word alongside",
+   "config": {
+    "device_classes": [
+     "battery"
+    ],
+    "states": [
+     15,
+     "unavailable"
+    ]
+   },
+   "expect_ids": [
+    "sensor.bath_fp300_battery",
+    "sensor.garage_battery"
+   ]
+  },
+  {
+   "name": "v2 a word never matches a numeric state",
+   "config": {
+    "patterns": [
+     "battery"
+    ],
+    "states": [
+     "hundred"
+    ]
+   },
+   "expect_ids": [],
+   "unmatched_values": [
+    {
+     "value": "hundred",
+     "suggestions": []
+    }
+   ]
+  },
+  {
+   "name": "v2 a number never matches a word state",
+   "config": {
+    "patterns": [
+     "string_hundred"
+    ],
+    "states": [
+     "100"
+    ]
+   },
+   "expect_ids": []
+  },
+  {
+   "name": "v2 typo flagged with suggestion (occupancy selected)",
+   "config": {
+    "patterns": [
+     "fp300_occupancy"
+    ],
+    "states": [
+     "Cleat"
+    ]
+   },
+   "expect_ids": [],
+   "unmatched_values": [
+    {
+     "value": "Cleat",
+     "suggestions": [
+      "Clear"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "v2 alias resolves per entity: Closed never matches a light",
+   "config": {
+    "patterns": [
+     "light."
+    ],
+    "states": [
+     "Closed"
+    ]
+   },
+   "expect_ids": [],
+   "unmatched_values": [
+    {
+     "value": "Closed",
+     "suggestions": []
+    }
+   ]
+  },
+  {
+   "name": "v2 valid word, no unmatched",
+   "config": {
+    "patterns": [
+     "fp300_occupancy"
+    ],
+    "states": [
+     "clear"
+    ]
+   },
+   "expect_ids": [
+    "binary_sensor.kitchen_fp300_occupancy"
+   ],
+   "unmatched_values": []
+  },
+  {
+   "name": "v2 vocabulary includes states not currently present (Detected at night)",
+   "config": {
+    "patterns": [
+     "fp300_occupancy"
+    ],
+    "states": [
+     "Detected"
+    ]
+   },
+   "expect_ids": [
+    "binary_sensor.bath_fp300_occupancy"
+   ],
+   "unmatched_values": []
+  },
+  {
+   "name": "v2 suggestion from vocabulary across selected entities",
+   "config": {
+    "patterns": [
+     "light.",
+     "sun."
+    ],
+    "states": [
+     "Below horizen"
+    ]
+   },
+   "expect_ids": [],
+   "unmatched_values": [
+    {
+     "value": "Below horizen",
+     "suggestions": [
+      "Below horizon"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "v2 unmatched only counts word entries, ranges are fine",
+   "config": {
+    "device_classes": [
+     "battery"
+    ],
+    "states": [
+     "<20",
+     "Cleat"
+    ]
+   },
+   "expect_ids": [
+    "sensor.bath_fp300_battery"
+   ],
+   "unmatched_values": [
+    {
+     "value": "Cleat",
+     "suggestions": []
+    }
+   ]
+  },
+  {
+   "name": "v2 current raw state is always in the vocabulary",
+   "config": {
+    "patterns": [
+     "battery_type"
+    ],
+    "states": [
+     "cr2450"
+    ]
+   },
+   "expect_ids": [
+    "sensor.battery_type"
+   ],
+   "unmatched_values": []
   }
  ]
 }

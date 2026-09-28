@@ -38,6 +38,7 @@ def _snapshot() -> tuple[Snapshot, datetime]:
                   for k, v in s["entities"].items()},
         devices={k: DeviceRow(area_id=v.get("area_id"), labels=tuple(v.get("labels") or [])) for k, v in s["devices"].items()},
         formatted=lambda entity_id: s["formatted"].get(entity_id),
+        vocabulary=lambda entity_id: [tuple(p) for p in s.get("vocabulary", {}).get(entity_id, [])],
     )
     return snap, datetime.fromisoformat(s["now"])
 
@@ -57,6 +58,9 @@ def _run_case(case: dict) -> None:
         assert res.configured is case["configured"], f"{case['name']}: configured={res.configured}"
     if "unreadable" in case:
         assert list(flt.unreadable) == case["unreadable"], f"{case['name']}: unreadable={list(flt.unreadable)}"
+    if "unmatched_values" in case:
+        got = [{"value": u.value, "suggestions": list(u.suggestions)} for u in res.unmatched_values]
+        assert got == case["unmatched_values"], f"{case['name']}: unmatched={got}"
 
 
 def test_vectors():

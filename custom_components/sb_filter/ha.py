@@ -15,12 +15,12 @@ from homeassistant.helpers import (
     label_registry as lr,
 )
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
-from homeassistant.helpers.translation import async_translate_state
+from homeassistant.helpers.translation import async_get_cached_translations, async_translate_state
 from homeassistant.util import dt as dt_util
 
 from .const import DEBOUNCE_SECONDS, DOMAIN, DURATION_TICK_SECONDS, GRAMMAR_VERSION
 from .grammar import Filter, parse_filter
-from .matcher import DeviceRow, EntityRow, MatchResult, Snapshot, StateRow, evaluate
+from .matcher import DeviceRow, EntityRow, MatchResult, Snapshot, StateRow, evaluate, values as matcher_values
 
 _REGISTRY_EVENTS = (
     er.EVENT_ENTITY_REGISTRY_UPDATED,
@@ -32,6 +32,38 @@ _REGISTRY_EVENTS = (
 
 def _fmt_cache(hass: HomeAssistant) -> dict:
     return hass.data.setdefault(DOMAIN, {}).setdefault("fmt_cache", {})
+
+
+def _vocab_cache(hass: HomeAssistant) -> dict:
+    return hass.data.setdefault(DOMAIN, {}).setdefault("vocab_cache", {})
+
+
+@callback
+def _vocabulary_for(hass: HomeAssistant, domain: str, device_class: str | None, platform: str | None,
+                    translation_key: str | None) -> list[tuple[str, str | None]]:
+    """The states HA's translation tables know for this kind of entity: (raw, translated).
+
+    Keys look like  component.<domain>.entity_component.<device_class|_>.state.<raw>
+    and, for an entity with its own vocabulary,
+                    component.<platform>.entity.<domain>.<translation_key>.state.<raw>
+    — exactly what async_translate_state reads, so the aliases can never disagree."""
+    lang = hass.config.language
+    found: dict[str, str] = {}
+    if platform and translation_key:
+        prefix = f"component.{platform}.entity.{domain}.{translation_key}.state."
+        for k, v in async_get_cached_translations(hass, lang, "entity", platform).items():
+            if k.startswith(prefix) and "." not in k[len(prefix):]:
+                found[k[len(prefix):]] = v
+    if not found:
+        table = async_get_cached_translations(hass, lang, "entity_component", domain)
+        for dc in ((device_class or "_"), "_"):
+            prefix = f"component.{domain}.entity_component.{dc}.state."
+            for k, v in table.items():
+                if k.startswith(prefix) and "." not in k[len(prefix):]:
+                    found.setdefault(k[len(prefix):], v)
+            if found:
+                break
+    return [(raw, label) for raw, label in found.items()]
 
 
 @callback
@@ -73,7 +105,33 @@ def build_snapshot(hass: HomeAssistant) -> Snapshot:
                 cache[key] = row.state
         return cache[key]
 
-    return Snapshot(states=states, entities=entities, devices=devices, formatted=formatted)
+    vcache = _vocab_cache(hass)
+
+    def vocabulary(entity_id: str) -> list[tuple[str, str | None]]:
+        row = states.get(entity_id)
+        if row is None:
+            return []
+        entry = ent_reg.async_get(entity_id)
+        platform = entry.platform if entry else None
+        tkey = entry.translation_key if entry else None
+        dclass = row.attributes.get("device_class")
+        domain = entity_id.split(".", 1)[0]
+        key = (domain, dclass, platform, tkey)
+        if key not in vcache:
+            try:
+                vcache[key] = _vocabulary_for(hass, domain, dclass, platform, tkey)
+            except Exception:  # noqa: BLE001
+                vcache[key] = []
+        vocab = list(vcache[key])
+        options = row.attributes.get("options")          # enum sensors carry their own list
+        if isinstance(options, (list, tuple)):
+            known = {r.lower() for r, _ in vocab}
+            for o in options:
+                if str(o).lower() not in known:
+                    vocab.append((str(o), None))
+        return vocab
+
+    return Snapshot(states=states, entities=entities, devices=devices, formatted=formatted, vocabulary=vocabulary)
 
 
 @callback
@@ -88,8 +146,14 @@ def result_payload(flt: Filter, res: MatchResult) -> dict[str, Any]:
         "pattern_counts": list(res.pattern_counts),
         "configured": res.configured,
         "unreadable": list(flt.unreadable),
+        "unmatched_values": [{"value": u.value, "suggestions": list(u.suggestions)} for u in res.unmatched_values],
         "grammar": GRAMMAR_VERSION,
     }
+
+
+@callback
+def values_now(hass: HomeAssistant, config: dict[str, Any]) -> list[dict]:
+    return matcher_values(parse_filter(config), build_snapshot(hass))
 
 
 class FilterSubscription:

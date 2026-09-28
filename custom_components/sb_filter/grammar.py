@@ -145,7 +145,8 @@ class Filter:
     areas: tuple[str, ...] = ()
     device_classes: tuple[str, ...] = ()        # lower-cased
     units: tuple[str, ...] = ()                 # exact
-    values: tuple[str, ...] = ()                # lower-cased state values (raw or formatted)
+    values: tuple[str, ...] = ()                # lower-cased WORD values (raw or translated); numbers became ranges
+    value_text: tuple[str, ...] = ()            # the same words as typed, for the unmatched report
     ranges: tuple[Range, ...] = ()
     state_for: Duration | None = None
     unreadable: tuple[str, ...] = ()            # things we could not parse, for the editor to show
@@ -178,8 +179,11 @@ def parse_filter(config: dict[str, Any] | None) -> Filter:
     ranges: list[Range] = []
     for s in as_list(c.get("states")):
         r = parse_range(s)
+        n = is_number(s) if r is None else None
         if r:
             ranges.append(r)
+        elif n is not None:
+            ranges.append(Range(lo=n, hi=n))          # v2: a plain number is numeric EQUALITY
         else:
             values.append(s.lower())
     lo, hi = is_number(c.get("state_min")), is_number(c.get("state_max"))
@@ -197,6 +201,7 @@ def parse_filter(config: dict[str, Any] | None) -> Filter:
         device_classes=tuple(s.lower() for s in as_list(c.get("device_classes"))),
         units=tuple(as_list(c.get("units"))),
         values=tuple(values),
+        value_text=tuple(w for w in as_list(c.get("states")) if parse_range(w) is None and is_number(w) is None),
         ranges=tuple(ranges),
         state_for=dur,
         unreadable=tuple(unreadable),

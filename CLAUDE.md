@@ -56,3 +56,22 @@ tracebacks) until the revert. 0.1.2 = devices iterate, entities `.values()`.
 Verified: no deprecation line after restart, `labels: [matter_hub]` → 6.
 Lesson: read the deprecation's SOURCE (the docstring says exactly which
 form is supported) before changing two containers on one warning.
+
+## 0.2.0 — grammar v2 (2026-09-28)
+
+User-driven revisit of `states`: THREE KINDS, decided by the state itself.
+Numeric → ranges + **equality** (a plain number entry; `100` matches
+`100.0`); never string-compared. Binary/string → raw always, HA's
+translated alias per entity (device_class or translation_key). A word never
+matches a numeric state and vice versa. Typos: **validation by
+membership** — `unmatched_values` = words in NO selected entity's
+vocabulary, with did-you-mean (difflib ≥0.75, one suggestion per
+underlying state, translated spelling first). Vocabulary comes from HA's
+own translation cache (`async_get_cached_translations`, keys
+`component.<domain>.entity_component.<dc|_>.state.*` or
+`component.<platform>.entity.<domain>.<tkey>.state.*`) + enum `options` +
+the current raw state — no hand table, no type annotation asked of the
+user (`device_classes` is the qualifier when wanted). New WS
+`sb_filter/values` {config} → vocabulary of the non-state selection with
+`current`/`possible` counts, for chips. 49 vectors (`vocabulary` map in the
+snapshot). Numeric equality was the one v1→v2 meaning change.
