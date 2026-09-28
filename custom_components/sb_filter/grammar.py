@@ -127,6 +127,32 @@ def parse_duration(v: Any) -> Duration | None:
     return Duration(op=m.group(1) or ">=", seconds=secs)
 
 
+_RATE_RX = re.compile(r"^(<=|<|>=|>)\s*(-?\d+(?:\.\d+)?)\s*/\s*([mhd])$", re.I)
+
+
+@dataclass(frozen=True)
+class RateTerm:
+    op: str            # < <= > >=
+    value: float       # in units per `per`
+    per: str           # m h d
+    per_seconds: float
+
+    def holds(self, per_second: float) -> bool:
+        r = per_second * self.per_seconds
+        return {"<": r < self.value, "<=": r <= self.value, ">": r > self.value, ">=": r >= self.value}[self.op]
+
+
+def parse_rate(v: Any) -> RateTerm | None:
+    """``>0.5/h`` ``<-2/h`` ``>=1/m`` ``<0.1/d`` — change per minute/hour/day; comparator required."""
+    if v is None or v == "":
+        return None
+    m = _RATE_RX.match(str(v).strip())
+    if not m:
+        return None
+    per = m.group(3).lower()
+    return RateTerm(op=m.group(1), value=float(m.group(2)), per=per, per_seconds=_UNIT_SECS[per])
+
+
 def is_number(s: Any) -> float | None:
     """The float value of a numeric state, else None (``inf``/``nan`` are not states we range over)."""
     try:
@@ -149,6 +175,8 @@ class Filter:
     value_text: tuple[str, ...] = ()            # the same words as typed, for the unmatched report
     ranges: tuple[Range, ...] = ()
     state_for: Duration | None = None
+    rates: tuple[RateTerm, ...] = ()            # ORed; only numeric states have a rate
+    rate_window: float | None = None            # seconds; default = the largest unit among the terms
     unreadable: tuple[str, ...] = ()            # things we could not parse, for the editor to show
 
     @property
@@ -160,7 +188,7 @@ class Filter:
         """Nothing configured = match NOTHING (never the whole estate)."""
         return bool(
             self.active_patterns or self.labels or self.areas or self.device_classes
-            or self.units or self.values or self.ranges or self.state_for
+            or self.units or self.values or self.ranges or self.state_for or self.rates
         )
 
 
@@ -194,6 +222,20 @@ def parse_filter(config: dict[str, Any] | None) -> Filter:
     if c.get("state_for") not in (None, "") and dur is None:
         unreadable.append(f"state_for: {c.get('state_for')}")
 
+    rates: list[RateTerm] = []
+    for r in as_list(c.get("rate")):
+        term = parse_rate(r)
+        if term:
+            rates.append(term)
+        else:
+            unreadable.append(f"rate: {r}")
+    window = None
+    if rates:
+        w = parse_duration(c.get("rate_window"))
+        if c.get("rate_window") not in (None, "") and w is None:
+            unreadable.append(f"rate_window: {c.get('rate_window')}")
+        window = w.seconds if w else max(t.per_seconds for t in rates)
+
     return Filter(
         patterns=patterns,
         labels=tuple(as_list(c.get("labels"))),
@@ -204,5 +246,7 @@ def parse_filter(config: dict[str, Any] | None) -> Filter:
         value_text=tuple(w for w in as_list(c.get("states")) if parse_range(w) is None and is_number(w) is None),
         ranges=tuple(ranges),
         state_for=dur,
+        rates=tuple(rates),
+        rate_window=window,
         unreadable=tuple(unreadable),
     )

@@ -8,13 +8,13 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from .const import GRAMMAR_VERSION
-from .ha import FilterSubscription, match_now, result_payload, values_now
+from .ha import FilterSubscription, async_match, result_payload, values_now
 
 
 @websocket_api.websocket_command({vol.Required("type"): "sb_filter/match", vol.Required("config"): dict})
-@callback
-def ws_match(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    flt, res = match_now(hass, msg["config"])
+@websocket_api.async_response
+async def ws_match(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    flt, res = await async_match(hass, msg["config"])
     connection.send_result(msg["id"], result_payload(flt, res))
 
 

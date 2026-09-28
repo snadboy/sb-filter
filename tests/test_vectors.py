@@ -39,6 +39,7 @@ def _snapshot() -> tuple[Snapshot, datetime]:
         devices={k: DeviceRow(area_id=v.get("area_id"), labels=tuple(v.get("labels") or [])) for k, v in s["devices"].items()},
         formatted=lambda entity_id: s["formatted"].get(entity_id),
         vocabulary=lambda entity_id: [tuple(p) for p in s.get("vocabulary", {}).get(entity_id, [])],
+        history=lambda entity_id, window: [(datetime.fromisoformat(t), float(v)) for t, v in s.get("history", {}).get(entity_id, [])],
     )
     return snap, datetime.fromisoformat(s["now"])
 

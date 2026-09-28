@@ -75,3 +75,20 @@ user (`device_classes` is the qualifier when wanted). New WS
 `sb_filter/values` {config} → vocabulary of the non-state selection with
 `current`/`possible` counts, for chips. 49 vectors (`vocabulary` map in the
 snapshot). Numeric equality was the one v1→v2 meaning change.
+
+## 0.3.0 — grammar v3: `rate` (2026-09-28)
+
+`rate: [">0.5/h", "<-2/h"]` (+ optional `rate_window`): change of a numeric
+state per m/h/d; reference = latest sample AT OR BEFORE now−window, none →
+unknown → never matches (a 15-min-old sensor has no hourly rate; and with
+the default 1-minute window a `/m` term is "the last minute", which is 0
+when nothing changed — vector'd). `RateTracker` in `hass.data`: per-entity
+deques seeded ONCE from the recorder (`history.state_changes_during_period`
+per entity inside one executor job, chunks of 50) then appended from
+state_changed; trimmed to 2×window+60 s keeping one older reference
+sample. `_scope_ids` = the non-rate categories' selection, numeric only;
+a rate alone = every numeric entity (expensive — documented).
+`async_match` (WS match is now `async_response`) and the subscription's
+`_seed_then_recompute` await seeding; rate subscriptions tick every 60 s
+and re-seed newly-scoped entities after each recompute. `after_dependencies:
+["recorder"]`. 61 vectors (`history` map in the snapshot).

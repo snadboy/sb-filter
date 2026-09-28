@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import difflib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable
 
 from .grammar import Filter, is_number
@@ -45,6 +45,10 @@ class Snapshot:
     # translation tables (domain/device_class or platform/translation_key) and enum options.
     # The current raw state is always added by the matcher. Numeric entities have none.
     vocabulary: Callable[[str], list[tuple[str, str | None]]] = lambda entity_id: []
+    # entity_id, window_seconds -> numeric samples (time, value) ascending, covering at least the
+    # window when the source has them. The matcher uses the latest sample AT OR BEFORE now-window
+    # as the reference; with no such sample the rate is unknown and never matches.
+    history: Callable[[str, float], list[tuple[datetime, float]]] = lambda entity_id, window: []
 
 
 @dataclass(frozen=True)
@@ -137,6 +141,27 @@ def _validate_values(flt: Filter, snap: Snapshot, selected: list[str]) -> tuple[
     return tuple(out)
 
 
+def rate_per_second(samples: list[tuple[datetime, float]], now: datetime, now_value: float, window: float) -> float | None:
+    """(value now − the value HELD at the window's start) / window, or None without a sample that old.
+
+    The reference sample only supplies the value the entity had at now−window (a state is
+    held until the next change); dividing by the window — not by the sample's age — keeps the
+    answer independent of when samples happened to arrive (attribute-only updates repeat a
+    value at a later time and would otherwise shrink the denominator)."""
+    if window <= 0:
+        return None
+    cutoff = now - timedelta(seconds=window)
+    ref = None
+    for ts, v in samples:
+        if ts <= cutoff:
+            ref = v
+        else:
+            break
+    if ref is None:
+        return None
+    return (now_value - ref) / window
+
+
 def evaluate(flt: Filter, snap: Snapshot, now: datetime) -> MatchResult:
     """Every configured category must pass; blank patterns never count."""
     counts = [0] * len(flt.patterns)
@@ -191,6 +216,13 @@ def evaluate(flt: Filter, snap: Snapshot, now: datetime) -> MatchResult:
         if flt.state_for is not None:
             age = (now - row.last_changed).total_seconds()
             if not flt.state_for.holds(age):
+                continue
+        if flt.rates:
+            n = is_number(row.state)
+            if n is None:
+                continue
+            r = rate_per_second(snap.history(entity_id, flt.rate_window or 0), now, n, flt.rate_window or 0)
+            if r is None or not any(term.holds(r) for term in flt.rates):
                 continue
         ids.append(entity_id)
     return MatchResult(

@@ -3,7 +3,8 @@ filter's result current (states, registries, and time all move it)."""
 
 from __future__ import annotations
 
-from datetime import timedelta
+from collections import deque
+from datetime import datetime, timedelta
 from typing import Any, Callable
 
 from homeassistant.const import EVENT_STATE_CHANGED
@@ -18,7 +19,8 @@ from homeassistant.helpers.event import async_call_later, async_track_time_inter
 from homeassistant.helpers.translation import async_get_cached_translations, async_translate_state
 from homeassistant.util import dt as dt_util
 
-from .const import DEBOUNCE_SECONDS, DOMAIN, DURATION_TICK_SECONDS, GRAMMAR_VERSION
+from .const import DEBOUNCE_SECONDS, DOMAIN, DURATION_TICK_SECONDS, GRAMMAR_VERSION, RATE_MAX_SAMPLES, RATE_TICK_SECONDS
+from .grammar import is_number
 from .grammar import Filter, parse_filter
 from .matcher import DeviceRow, EntityRow, MatchResult, Snapshot, StateRow, evaluate, values as matcher_values
 
@@ -64,6 +66,97 @@ def _vocabulary_for(hass: HomeAssistant, domain: str, device_class: str | None, 
             if found:
                 break
     return [(raw, label) for raw, label in found.items()]
+
+
+class RateTracker:
+    """Numeric sample buffers for the entities a rate term needs.
+
+    Seeded from the recorder once per entity (so a one-shot match and a cold
+    start can answer immediately), then appended live from state_changed. Kept
+    only for entities somebody asked about; capped per entity."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+        self.buffers: dict[str, deque] = {}
+        self.window: dict[str, float] = {}         # entity -> longest window requested (s)
+        self._seeded: set[str] = set()
+        self._unsub: CALLBACK_TYPE | None = None
+
+    @callback
+    def samples(self, entity_id: str, window: float) -> list[tuple[datetime, float]]:
+        return list(self.buffers.get(entity_id, ()))
+
+    def _listen(self) -> None:
+        if self._unsub is None:
+            self._unsub = self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._on_state)
+
+    @callback
+    def _on_state(self, event: Event) -> None:
+        new = event.data.get("new_state")
+        if new is None or new.entity_id not in self.buffers:
+            return
+        n = is_number(new.state)
+        if n is None:
+            return
+        buf = self.buffers[new.entity_id]
+        buf.append((new.last_updated, n))
+        self._trim(new.entity_id)
+
+    def _trim(self, entity_id: str) -> None:
+        buf = self.buffers[entity_id]
+        keep_from = dt_util.utcnow() - timedelta(seconds=self.window.get(entity_id, 0) * 2 + 60)
+        while len(buf) > 1 and buf[0][0] < keep_from and buf[1][0] <= keep_from:
+            buf.popleft()          # keep one sample older than the window as the reference
+
+    async def ensure(self, entity_ids: list[str], window: float) -> bool:
+        """Seed buffers for any of these entities not yet tracked. Returns True if anything was seeded."""
+        self._listen()
+        todo = []
+        for e in entity_ids:
+            self.window[e] = max(self.window.get(e, 0), window)
+            if e not in self._seeded:
+                self._seeded.add(e)
+                self.buffers.setdefault(e, deque(maxlen=RATE_MAX_SAMPLES))
+                todo.append(e)
+        if not todo:
+            return False
+        try:
+            from homeassistant.components.recorder import get_instance, history  # noqa: PLC0415
+        except ImportError:
+            return True
+        start = dt_util.utcnow() - timedelta(seconds=window * 2 + 60)
+
+        def _fetch(ids: list[str]) -> dict[str, list]:
+            out = {}
+            for e in ids:
+                out[e] = history.state_changes_during_period(
+                    self.hass, start, None, entity_id=e, no_attributes=True, include_start_time_state=True,
+                ).get(e, [])
+            return out
+
+        for i in range(0, len(todo), 50):
+            chunk = todo[i:i + 50]
+            try:
+                rows = await get_instance(self.hass).async_add_executor_job(_fetch, chunk)
+            except Exception:  # noqa: BLE001 - recorder off or busy: buffers fill live instead
+                continue
+            for e, states in rows.items():
+                buf = self.buffers[e]
+                have = {ts for ts, _ in buf}
+                for st in states:
+                    n = is_number(st.state)
+                    if n is not None and st.last_updated not in have:
+                        buf.append((st.last_updated, n))
+                srt = sorted(buf)
+                buf.clear(); buf.extend(srt)
+        return True
+
+
+def rate_tracker(hass: HomeAssistant) -> RateTracker:
+    data = hass.data.setdefault(DOMAIN, {})
+    if "rates" not in data:
+        data["rates"] = RateTracker(hass)
+    return data["rates"]
 
 
 @callback
@@ -131,12 +224,44 @@ def build_snapshot(hass: HomeAssistant) -> Snapshot:
                     vocab.append((str(o), None))
         return vocab
 
-    return Snapshot(states=states, entities=entities, devices=devices, formatted=formatted, vocabulary=vocabulary)
+    tracker = rate_tracker(hass)
+    return Snapshot(states=states, entities=entities, devices=devices, formatted=formatted, vocabulary=vocabulary,
+                    history=tracker.samples)
+
+
+def _scope_ids(hass: HomeAssistant, flt: Filter) -> list[str]:
+    """Entities the filter's non-rate categories select — the ones whose history a rate term needs."""
+    scoped = Filter(patterns=flt.patterns, labels=flt.labels, areas=flt.areas, device_classes=flt.device_classes, units=flt.units,
+                    values=flt.values, ranges=flt.ranges, state_for=flt.state_for)
+    if scoped.configured:
+        ids = list(evaluate(scoped, build_snapshot(hass), dt_util.utcnow()).ids)
+    else:
+        ids = [st.entity_id for st in hass.states.async_all()]        # a rate alone: every numeric entity
+    out = []
+    for e in ids:
+        st = hass.states.get(e)
+        if st is not None and is_number(st.state) is not None:
+            out.append(e)
+    return out
+
+
+async def async_prepare_rates(hass: HomeAssistant, flt: Filter) -> bool:
+    """Seed rate buffers for what this filter needs. True if new entities were seeded."""
+    if not flt.rates:
+        return False
+    return await rate_tracker(hass).ensure(_scope_ids(hass, flt), flt.rate_window or 0)
 
 
 @callback
 def match_now(hass: HomeAssistant, config: dict[str, Any]) -> tuple[Filter, MatchResult]:
     flt = parse_filter(config)
+    return flt, evaluate(flt, build_snapshot(hass), dt_util.utcnow())
+
+
+async def async_match(hass: HomeAssistant, config: dict[str, Any]) -> tuple[Filter, MatchResult]:
+    """match_now, after seeding any rate history the filter needs."""
+    flt = parse_filter(config)
+    await async_prepare_rates(hass, flt)
     return flt, evaluate(flt, build_snapshot(hass), dt_util.utcnow())
 
 
@@ -168,6 +293,7 @@ class FilterSubscription:
         self._last: tuple[str, ...] | None = None
         self._pending: CALLBACK_TYPE | None = None
         self._unsubs: list[CALLBACK_TYPE] = []
+        self._seeding = False
 
     @callback
     def start(self) -> None:
@@ -178,7 +304,18 @@ class FilterSubscription:
             self._unsubs.append(
                 async_track_time_interval(self.hass, self._on_tick, timedelta(seconds=DURATION_TICK_SECONDS))
             )
-        self._recompute(force=True)
+        if self.filter.rates:
+            self._unsubs.append(async_track_time_interval(self.hass, self._on_tick, timedelta(seconds=RATE_TICK_SECONDS)))
+            self.hass.async_create_task(self._seed_then_recompute())
+        else:
+            self._recompute(force=True)
+
+    async def _seed_then_recompute(self) -> None:
+        try:
+            await async_prepare_rates(self.hass, self.filter)
+        finally:
+            if self._unsubs:                 # still running
+                self._recompute(force=True)
 
     @callback
     def stop(self) -> None:
@@ -214,3 +351,13 @@ class FilterSubscription:
         if force or res.ids != self._last:
             self._last = res.ids
             self.send(result_payload(self.filter, res))
+        if self.filter.rates and not self._seeding:
+            # entities newly in scope (renamed, added) get their history seeded, then one more pass
+            self._seeding = True
+            async def _more():
+                try:
+                    if await async_prepare_rates(self.hass, self.filter) and self._unsubs:
+                        self._recompute()
+                finally:
+                    self._seeding = False
+            self.hass.async_create_task(_more())

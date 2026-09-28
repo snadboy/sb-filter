@@ -1,5 +1,5 @@
 {
- "grammar": 2,
+ "grammar": 3,
  "snapshot": {
   "now": "2026-09-27T12:00:00+00:00",
   "states": {
@@ -142,6 +142,33 @@
      "friendly_name": "Word Hundred"
     },
     "last_changed": "2026-09-27T11:58:20+00:00"
+   },
+   "sensor.freezer_temp": {
+    "state": "12.0",
+    "attributes": {
+     "friendly_name": "Freezer Temp",
+     "device_class": "temperature",
+     "unit_of_measurement": "\u00b0F"
+    },
+    "last_changed": "2026-09-27T11:59:00+00:00"
+   },
+   "sensor.fridge_temp": {
+    "state": "38.0",
+    "attributes": {
+     "friendly_name": "Fridge Temp",
+     "device_class": "temperature",
+     "unit_of_measurement": "\u00b0F"
+    },
+    "last_changed": "2026-09-27T11:59:00+00:00"
+   },
+   "sensor.new_temp": {
+    "state": "70.0",
+    "attributes": {
+     "friendly_name": "New Temp",
+     "device_class": "temperature",
+     "unit_of_measurement": "\u00b0F"
+    },
+    "last_changed": "2026-09-27T11:59:00+00:00"
    }
   },
   "entities": {
@@ -328,6 +355,54 @@
     [
      "CR2450",
      null
+    ]
+   ]
+  },
+  "history": {
+   "sensor.freezer_temp": [
+    [
+     "2026-09-27T10:00:00+00:00",
+     10.0
+    ],
+    [
+     "2026-09-27T11:00:00+00:00",
+     11.0
+    ],
+    [
+     "2026-09-27T11:30:00+00:00",
+     11.5
+    ],
+    [
+     "2026-09-27T11:59:00+00:00",
+     12.0
+    ]
+   ],
+   "sensor.fridge_temp": [
+    [
+     "2026-09-27T10:00:00+00:00",
+     40.0
+    ],
+    [
+     "2026-09-27T11:00:00+00:00",
+     40.0
+    ],
+    [
+     "2026-09-27T11:50:00+00:00",
+     39.0
+    ],
+    [
+     "2026-09-27T11:59:00+00:00",
+     38.0
+    ]
+   ],
+   "sensor.new_temp": [
+    [
+     "2026-09-27T11:45:00+00:00",
+     69.0
+    ],
+    [
+     "2026-09-27T11:59:00+00:00",
+     70.0
     ]
    ]
   }
@@ -562,7 +637,10 @@
     ]
    },
    "expect_ids": [
+    "sensor.freezer_temp",
+    "sensor.fridge_temp",
     "sensor.kitchen_temperature",
+    "sensor.new_temp",
     "sensor.rack_temperature"
    ]
   },
@@ -652,7 +730,10 @@
     "states": "<75, >=100"
    },
    "expect_ids": [
+    "sensor.freezer_temp",
+    "sensor.fridge_temp",
     "sensor.kitchen_temperature",
+    "sensor.new_temp",
     "sensor.rack_temperature"
    ]
   },
@@ -1034,6 +1115,181 @@
     "sensor.battery_type"
    ],
    "unmatched_values": []
+  },
+  {
+   "name": "v3 rate: warming faster than 0.5/h",
+   "config": {
+    "device_classes": [
+     "temperature"
+    ],
+    "rate": [
+     ">0.5/h"
+    ]
+   },
+   "expect_ids": [
+    "sensor.freezer_temp"
+   ]
+  },
+  {
+   "name": "v3 rate: falling at 2/h or faster",
+   "config": {
+    "device_classes": [
+     "temperature"
+    ],
+    "rate": [
+     "<=-2/h"
+    ]
+   },
+   "expect_ids": [
+    "sensor.fridge_temp"
+   ]
+  },
+  {
+   "name": "v3 rate: either direction, ORed",
+   "config": {
+    "device_classes": [
+     "temperature"
+    ],
+    "rate": [
+     ">0.5/h",
+     "<-1/h"
+    ]
+   },
+   "expect_ids": [
+    "sensor.freezer_temp",
+    "sensor.fridge_temp"
+   ]
+  },
+  {
+   "name": "v3 rate: insufficient history never matches",
+   "config": {
+    "patterns": [
+     "new_temp"
+    ],
+    "rate": [
+     ">0/h"
+    ]
+   },
+   "expect_ids": []
+  },
+  {
+   "name": "v3 rate: per-minute unit over an hour window",
+   "config": {
+    "device_classes": [
+     "temperature"
+    ],
+    "rate": [
+     ">0.01/m"
+    ],
+    "rate_window": "1h"
+   },
+   "expect_ids": [
+    "sensor.freezer_temp"
+   ]
+  },
+  {
+   "name": "v3 rate: window override (2h): freezer +2/2h = 1/h, fridge \u22122/2h",
+   "config": {
+    "device_classes": [
+     "temperature"
+    ],
+    "rate": [
+     ">0.9/h"
+    ],
+    "rate_window": "2h"
+   },
+   "expect_ids": [
+    "sensor.freezer_temp"
+   ]
+  },
+  {
+   "name": "v3 rate: window shorter than the unit (30m): fridge \u22121/30m = \u22122/h",
+   "config": {
+    "device_classes": [
+     "temperature"
+    ],
+    "rate": [
+     "<-1.5/h"
+    ],
+    "rate_window": "30m"
+   },
+   "expect_ids": [
+    "sensor.fridge_temp"
+   ]
+  },
+  {
+   "name": "v3 rate: combined with a range",
+   "config": {
+    "device_classes": [
+     "temperature"
+    ],
+    "states": [
+     "<20"
+    ],
+    "rate": [
+     ">0.5/h"
+    ]
+   },
+   "expect_ids": [
+    "sensor.freezer_temp"
+   ]
+  },
+  {
+   "name": "v3 rate: unreadable entry is ignored and reported (like state_for)",
+   "config": {
+    "device_classes": [
+     "temperature"
+    ],
+    "rate": [
+     "0.5/h"
+    ]
+   },
+   "expect_ids": [
+    "sensor.freezer_temp",
+    "sensor.fridge_temp",
+    "sensor.kitchen_temperature",
+    "sensor.new_temp",
+    "sensor.rack_temperature"
+   ],
+   "unreadable": [
+    "rate: 0.5/h"
+   ],
+   "configured": true
+  },
+  {
+   "name": "v3 rate alone is configured",
+   "config": {
+    "rate": [
+     ">0.5/h"
+    ]
+   },
+   "expect_ids": [
+    "sensor.freezer_temp"
+   ]
+  },
+  {
+   "name": "v3 rate: a non-numeric state has no rate",
+   "config": {
+    "patterns": [
+     "fp300_occupancy"
+    ],
+    "rate": [
+     ">0/h"
+    ]
+   },
+   "expect_ids": []
+  },
+  {
+   "name": "v3 rate: default window = the unit (1 m): last-minute rate is 0",
+   "config": {
+    "patterns": [
+     "freezer_temp"
+    ],
+    "rate": [
+     ">0.01/m"
+    ]
+   },
+   "expect_ids": []
   }
  ]
 }

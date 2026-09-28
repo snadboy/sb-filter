@@ -1,4 +1,4 @@
-# SB filter grammar — version 2
+# SB filter grammar — version 3
 
 One filter selects entities. It is the config of an SB Entity Browser card and the
 target of an SB Watch rule; `sb_filter` is its only implementation.
@@ -13,6 +13,8 @@ states: [on, Detected, unavailable, 100, "<20", ">=80", "40-60"]   # see "states
 state_min: 20                        # shorthand for one more inclusive range
 state_max: 50
 state_for: 2h                        # time in the current state
+rate: [">0.5/h", "<-2/h"]           # change per minute/hour/day, ORed
+rate_window: 1h                      # optional; default = the largest unit among the rate terms
 ```
 
 **Across categories: AND.** Every category that is configured must be satisfied.
@@ -118,12 +120,34 @@ attribute-only update does not reset it) with Home Assistant's clock.
 
 An unreadable value is ignored and reported in `unreadable`.
 
+## rate
+
+Change of a **numeric** state per minute, hour or day: `>0.5/h`, `<=-2/h`,
+`>=1/m`, `<0.1/d` — a comparator is required; entries are ORed. The rate is
+(value now − the value **held** at the start of the window) ÷ the window. The
+value held at now − `rate_window` is that of the latest sample at or before it
+(a state is held until the next change). With no sample that old the rate is
+**unknown and never matches** — a sensor with fifteen minutes of
+history has no hourly rate yet. `rate_window` defaults to the largest unit used
+(`/h` → 1 h); set it explicitly to measure over a different span (`30m`, `6h`).
+`units` pins the quantity, as with ranges. Non-numeric states have no rate.
+An unreadable entry is ignored and reported, like `state_for`.
+
+Samples come from Home Assistant's recorder (seeded when an entity first
+enters a rate filter's scope) and then live from state changes; a rate
+subscription is re-evaluated every 60 s because the reference slides even
+when no new sample arrives.
+
 ## Results
 
 `ids` (sorted), `pattern_counts`, `configured`, `unreadable`, `unmatched_values`
 (`[{value, suggestions}]`), `grammar` (this document's version). A subscription
 re-sends only when `ids` change; state and registry changes coalesce into one
 recompute per second, and a `state_for` term is re-evaluated every 30 s.
+
+## Changes from v2
+
+- `rate` and `rate_window` (this version). Nothing else changed.
 
 ## Changes from v1
 
