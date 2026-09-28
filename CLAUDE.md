@@ -92,3 +92,16 @@ a rate alone = every numeric entity (expensive — documented).
 `_seed_then_recompute` await seeding; rate subscriptions tick every 60 s
 and re-seed newly-scoped entities after each recompute. `after_dependencies:
 ["recorder"]`. 61 vectors (`history` map in the snapshot).
+
+## 0.4.0 — `sensor.sb_filter_live_filters` (2026-09-28)
+
+User: "an entity that will show a list of the current filters". First (and
+only) entity: state = number of live subscriptions; attributes `filters[]`
+(id, origin, config, matched, configured, unreadable, terms, started,
+last_change, recomputes, pushes), `rules`/`cards` counts, `rate_buffers`,
+cache sizes, `grammar`. Every `FilterSubscription` registers in
+`hass.data[DOMAIN]["subs"]` on start and drops on stop; a dispatcher
+signal (`SIGNAL_SUBS`) refreshes the sensor on start/stop/push. Origins:
+WS `subscribe` takes an optional `origin` and appends the connection's
+user name ("card: Lights on · Dan"); sb_watch passes "rule: <name>".
+SERVICE device "SB Filter"; sensor platform via the config entry.

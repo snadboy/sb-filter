@@ -18,11 +18,13 @@ async def ws_match(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
     connection.send_result(msg["id"], result_payload(flt, res))
 
 
-@websocket_api.websocket_command({vol.Required("type"): "sb_filter/subscribe", vol.Required("config"): dict})
+@websocket_api.websocket_command({vol.Required("type"): "sb_filter/subscribe", vol.Required("config"): dict, vol.Optional("origin"): str})
 @callback
 def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    who = getattr(getattr(connection, "user", None), "name", None) or "?"
+    origin = f"{msg.get('origin') or 'card'} · {who}"
     sub = FilterSubscription(
-        hass, msg["config"], lambda payload: connection.send_message(websocket_api.event_message(msg["id"], payload))
+        hass, msg["config"], lambda payload: connection.send_message(websocket_api.event_message(msg["id"], payload)), origin=origin
     )
     connection.subscriptions[msg["id"]] = sub.stop
     connection.send_result(msg["id"], {"grammar": GRAMMAR_VERSION})

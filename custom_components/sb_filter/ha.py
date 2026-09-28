@@ -15,11 +15,12 @@ from homeassistant.helpers import (
     entity_registry as er,
     label_registry as lr,
 )
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.translation import async_get_cached_translations, async_translate_state
 from homeassistant.util import dt as dt_util
 
-from .const import DEBOUNCE_SECONDS, DOMAIN, DURATION_TICK_SECONDS, GRAMMAR_VERSION, RATE_MAX_SAMPLES, RATE_TICK_SECONDS
+from .const import DEBOUNCE_SECONDS, DOMAIN, DURATION_TICK_SECONDS, GRAMMAR_VERSION, RATE_MAX_SAMPLES, RATE_TICK_SECONDS, SIGNAL_SUBS
 from .grammar import is_number
 from .grammar import Filter, parse_filter
 from .matcher import DeviceRow, EntityRow, MatchResult, Snapshot, StateRow, evaluate, values as matcher_values
@@ -281,15 +282,34 @@ def values_now(hass: HomeAssistant, config: dict[str, Any]) -> list[dict]:
     return matcher_values(parse_filter(config), build_snapshot(hass))
 
 
+_SUB_SEQ = [0]
+
+
+def live_subscriptions(hass: HomeAssistant) -> dict[int, "FilterSubscription"]:
+    return hass.data.setdefault(DOMAIN, {}).setdefault("subs", {})
+
+
 class FilterSubscription:
     """Push a filter's ids whenever they change: any state change, any registry
     change, and (with a state_for term) the passage of time. Bursts coalesce
-    into one recompute per DEBOUNCE_SECONDS; nothing is sent when the ids are unchanged."""
+    into one recompute per DEBOUNCE_SECONDS; nothing is sent when the ids are unchanged.
 
-    def __init__(self, hass: HomeAssistant, config: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+    Every live subscription is registered in hass.data so the diagnostics
+    sensor can list them (origin, config, matches, activity)."""
+
+    def __init__(self, hass: HomeAssistant, config: dict[str, Any], send: Callable[[dict[str, Any]], None],
+                 origin: str | None = None) -> None:
         self.hass = hass
+        self.config = config
+        self.origin = origin or "unknown"
         self.filter = parse_filter(config)
         self.send = send
+        _SUB_SEQ[0] += 1
+        self.id = _SUB_SEQ[0]
+        self.started = dt_util.utcnow()
+        self.last_change: datetime | None = None
+        self.recomputes = 0
+        self.pushes = 0
         self._last: tuple[str, ...] | None = None
         self._pending: CALLBACK_TYPE | None = None
         self._unsubs: list[CALLBACK_TYPE] = []
@@ -304,11 +324,13 @@ class FilterSubscription:
             self._unsubs.append(
                 async_track_time_interval(self.hass, self._on_tick, timedelta(seconds=DURATION_TICK_SECONDS))
             )
+        live_subscriptions(self.hass)[self.id] = self
         if self.filter.rates:
             self._unsubs.append(async_track_time_interval(self.hass, self._on_tick, timedelta(seconds=RATE_TICK_SECONDS)))
             self.hass.async_create_task(self._seed_then_recompute())
         else:
             self._recompute(force=True)
+        async_dispatcher_send(self.hass, SIGNAL_SUBS)
 
     async def _seed_then_recompute(self) -> None:
         try:
@@ -325,6 +347,22 @@ class FilterSubscription:
         if self._pending:
             self._pending()
             self._pending = None
+        if live_subscriptions(self.hass).pop(self.id, None) is not None:
+            async_dispatcher_send(self.hass, SIGNAL_SUBS)
+
+    def describe(self) -> dict[str, Any]:
+        """Compact on purpose: the recorder drops attributes over 16 KB, and 60 of these must fit."""
+        return {
+            "id": self.id,
+            "origin": self.origin,
+            "matched": len(self._last or ()),
+            "terms": [k for k in ("patterns", "labels", "areas", "device_classes", "units", "states", "state_for", "rate") if self.config.get(k) not in (None, "", [])],
+            "unreadable": len(self.filter.unreadable),
+            "started": self.started.isoformat(timespec="seconds"),
+            "last_change": self.last_change.isoformat(timespec="seconds") if self.last_change else None,
+            "recomputes": self.recomputes,
+            "pushes": self.pushes,
+        }
 
     @callback
     def _on_event(self, _event: Event) -> None:
@@ -348,9 +386,15 @@ class FilterSubscription:
     @callback
     def _recompute(self, force: bool = False) -> None:
         res = evaluate(self.filter, build_snapshot(self.hass), dt_util.utcnow())
+        self.recomputes += 1
         if force or res.ids != self._last:
+            changed = res.ids != self._last
             self._last = res.ids
+            self.pushes += 1
+            if changed:
+                self.last_change = dt_util.utcnow()
             self.send(result_payload(self.filter, res))
+            async_dispatcher_send(self.hass, SIGNAL_SUBS)
         if self.filter.rates and not self._seeding:
             # entities newly in scope (renamed, added) get their history seeded, then one more pass
             self._seeding = True

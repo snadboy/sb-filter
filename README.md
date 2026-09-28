@@ -1,7 +1,9 @@
 # SB Filter
 
 The one implementation of the **SB entity-filter grammar** for Home Assistant — a
-small integration with no entities of its own. It is what an
+small integration whose only entity, `sensor.sb_filter_live_filters`, lists every
+filter currently being watched (by which card or rule, matching how many, when it
+last changed). It is what an
 [SB Entity Browser](https://github.com/snadboy/sb-entity-browser) card asks
 "which entities match this config?", and what SB Watch rules are built on.
 
