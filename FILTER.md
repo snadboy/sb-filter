@@ -1,4 +1,4 @@
-# SB filter grammar — version 3
+# SB filter grammar — version 4
 
 One filter selects entities. It is the config of an SB Entity Browser card and the
 target of an SB Watch rule; `sb_filter` is its only implementation.
@@ -9,6 +9,7 @@ labels: [matter_hub]                 # entity's own labels OR its device's
 areas: [kitchen]                     # entity's area, else its device's
 device_classes: [battery]            # attribute device_class, case-insensitive
 units: ["%"]                         # attribute unit_of_measurement, exact
+classes: ["battery:%", temperature, ":°F"]   # device class AND unit as PAIRS, ORed — see "classes"
 states: [on, Detected, unavailable, 100, "<20", ">=80", "40-60"]   # see "states"
 state_min: 20                        # shorthand for one more inclusive range
 state_max: 50
@@ -105,6 +106,18 @@ text box. Chips store the raw value and show the translated label.
 Aliases follow HA's configured language: `Clear` in an English install is
 `off` everywhere.
 
+## classes
+
+`device_classes` and `units` are two independent lists: `[battery, temperature]`
+with `["%", "°F"]` also admits a battery sensor in °F. `classes` pairs them.
+Each entry is `class:unit`, with either side optional — `battery:%`,
+`temperature`, `:°F` — or the object form `{device_class: battery, unit: "%"}`.
+An entity satisfies the category when it satisfies **any one** entry, and an
+entry is satisfied when the class matches (case-insensitive, if given) **and**
+the unit matches (exact, if given). `classes` is its own category: it is ANDed
+with everything else, including `device_classes` and `units` if those are set.
+SB Watch's rule form writes `classes`; cards may use either.
+
 ## state_for
 
 Time in the **current** state, measured from `last_changed` (a state change; an
@@ -144,6 +157,10 @@ when no new sample arrives.
 (`[{value, suggestions}]`), `grammar` (this document's version). A subscription
 re-sends only when `ids` change; state and registry changes coalesce into one
 recompute per second, and a `state_for` term is re-evaluated every 30 s.
+
+## Changes from v3
+
+- `classes` (this version): device class and unit as pairs. Nothing else changed.
 
 ## Changes from v2
 

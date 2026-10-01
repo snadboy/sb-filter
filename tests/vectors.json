@@ -1,5 +1,5 @@
 {
- "grammar": 3,
+ "grammar": 4,
  "snapshot": {
   "now": "2026-09-27T12:00:00+00:00",
   "states": {
@@ -95,7 +95,7 @@
     "attributes": {
      "friendly_name": "Kitchen Temperature",
      "device_class": "temperature",
-     "unit_of_measurement": "\u00b0F"
+     "unit_of_measurement": "°F"
     },
     "last_changed": "2026-09-27T11:58:20+00:00"
    },
@@ -104,7 +104,7 @@
     "attributes": {
      "friendly_name": "Rack Temperature",
      "device_class": "temperature",
-     "unit_of_measurement": "\u00b0F"
+     "unit_of_measurement": "°F"
     },
     "last_changed": "2026-09-27T11:58:20+00:00"
    },
@@ -148,7 +148,7 @@
     "attributes": {
      "friendly_name": "Freezer Temp",
      "device_class": "temperature",
-     "unit_of_measurement": "\u00b0F"
+     "unit_of_measurement": "°F"
     },
     "last_changed": "2026-09-27T11:59:00+00:00"
    },
@@ -157,7 +157,7 @@
     "attributes": {
      "friendly_name": "Fridge Temp",
      "device_class": "temperature",
-     "unit_of_measurement": "\u00b0F"
+     "unit_of_measurement": "°F"
     },
     "last_changed": "2026-09-27T11:59:00+00:00"
    },
@@ -166,7 +166,7 @@
     "attributes": {
      "friendly_name": "New Temp",
      "device_class": "temperature",
-     "unit_of_measurement": "\u00b0F"
+     "unit_of_measurement": "°F"
     },
     "last_changed": "2026-09-27T11:59:00+00:00"
    }
@@ -559,7 +559,7 @@
    ]
   },
   {
-   "name": "labels: placeholder dropped \u2192 unconfigured",
+   "name": "labels: placeholder dropped → unconfigured",
    "config": {
     "labels": [
      "___no_items_available___"
@@ -633,7 +633,7 @@
    "name": "units exact",
    "config": {
     "units": [
-     "\u00b0F"
+     "°F"
     ]
    },
    "expect_ids": [
@@ -1188,7 +1188,7 @@
    ]
   },
   {
-   "name": "v3 rate: window override (2h): freezer +2/2h = 1/h, fridge \u22122/2h",
+   "name": "v3 rate: window override (2h): freezer +2/2h = 1/h, fridge −2/2h",
    "config": {
     "device_classes": [
      "temperature"
@@ -1203,7 +1203,7 @@
    ]
   },
   {
-   "name": "v3 rate: window shorter than the unit (30m): fridge \u22121/30m = \u22122/h",
+   "name": "v3 rate: window shorter than the unit (30m): fridge −1/30m = −2/h",
    "config": {
     "device_classes": [
      "temperature"
@@ -1290,6 +1290,118 @@
     ]
    },
    "expect_ids": []
+  },
+  {
+   "name": "classes: one pair class:unit",
+   "config": {
+    "classes": [
+     "battery:%"
+    ]
+   },
+   "expect_ids": [
+    "sensor.bath_fp300_battery",
+    "sensor.garage_battery",
+    "sensor.kitchen_fp300_battery"
+   ],
+   "configured": true
+  },
+  {
+   "name": "classes: class only, case-insensitive",
+   "config": {
+    "classes": [
+     "Occupancy"
+    ]
+   },
+   "expect_ids": [
+    "binary_sensor.bath_fp300_occupancy",
+    "binary_sensor.kitchen_fp300_occupancy"
+   ],
+   "configured": true
+  },
+  {
+   "name": "classes: unit only",
+   "config": {
+    "classes": [
+     ":V"
+    ]
+   },
+   "expect_ids": [
+    "sensor.bath_fp300_battery_voltage"
+   ],
+   "configured": true
+  },
+  {
+   "name": "classes: pairs are ORed, each pair ANDs class and unit",
+   "config": {
+    "classes": [
+     "battery:%",
+     "temperature:°F"
+    ]
+   },
+   "expect_ids": [
+    "sensor.bath_fp300_battery",
+    "sensor.freezer_temp",
+    "sensor.fridge_temp",
+    "sensor.garage_battery",
+    "sensor.kitchen_fp300_battery",
+    "sensor.kitchen_temperature",
+    "sensor.new_temp",
+    "sensor.rack_temperature"
+   ],
+   "configured": true
+  },
+  {
+   "name": "classes: a pair that no entity satisfies (battery in volts) matches nothing",
+   "config": {
+    "classes": [
+     "battery:V"
+    ]
+   },
+   "expect_ids": [],
+   "configured": true
+  },
+  {
+   "name": "classes: object form",
+   "config": {
+    "classes": [
+     {
+      "device_class": "voltage",
+      "unit": "V"
+     }
+    ]
+   },
+   "expect_ids": [
+    "sensor.bath_fp300_battery_voltage"
+   ],
+   "configured": true
+  },
+  {
+   "name": "classes AND states",
+   "config": {
+    "classes": [
+     "battery:%"
+    ],
+    "states": [
+     "<20",
+     "unavailable"
+    ]
+   },
+   "expect_ids": [
+    "sensor.bath_fp300_battery",
+    "sensor.garage_battery"
+   ],
+   "configured": true
+  },
+  {
+   "name": "classes: blank entries ignored; nothing left = not configured",
+   "config": {
+    "classes": [
+     "",
+     ":"
+    ]
+   },
+   "expect_ids": [],
+   "configured": false
   }
  ]
 }

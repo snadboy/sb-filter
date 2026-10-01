@@ -202,6 +202,11 @@ def evaluate(flt: Filter, snap: Snapshot, now: datetime) -> MatchResult:
             continue
         if flt.units and str(row.attributes.get("unit_of_measurement") if row.attributes.get("unit_of_measurement") is not None else "") not in flt.units:
             continue
+        if flt.classes:
+            row_dc = str(row.attributes.get("device_class") or "").lower()
+            row_unit = str(row.attributes.get("unit_of_measurement") if row.attributes.get("unit_of_measurement") is not None else "")
+            if not any((dc is None or dc == row_dc) and (unit is None or unit == row_unit) for dc, unit in flt.classes):
+                continue
         pre_state.append(entity_id)
         if flt.values or flt.ranges:
             # Three kinds of state: a numeric state meets only ranges/equality;
@@ -234,7 +239,7 @@ def evaluate(flt: Filter, snap: Snapshot, now: datetime) -> MatchResult:
 def values(flt: Filter, snap: Snapshot) -> list[dict]:
     """The vocabulary of the entities the filter's NON-state categories select, with how
     many of them are currently in each state — for an editor's chips."""
-    scoped = Filter(patterns=flt.patterns, labels=flt.labels, areas=flt.areas, device_classes=flt.device_classes, units=flt.units)
+    scoped = Filter(patterns=flt.patterns, labels=flt.labels, areas=flt.areas, device_classes=flt.device_classes, units=flt.units, classes=flt.classes)
     res = evaluate(scoped, snap, datetime.max.replace(tzinfo=None)) if scoped.configured else None
     selected = list(res.ids) if res else sorted(snap.states)
     table: dict[str, dict] = {}

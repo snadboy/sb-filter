@@ -171,6 +171,7 @@ class Filter:
     areas: tuple[str, ...] = ()
     device_classes: tuple[str, ...] = ()        # lower-cased
     units: tuple[str, ...] = ()                 # exact
+    classes: tuple[tuple[str | None, str | None], ...] = ()   # (device_class lower | None, unit | None) PAIRS, ORed
     values: tuple[str, ...] = ()                # lower-cased WORD values (raw or translated); numbers became ranges
     value_text: tuple[str, ...] = ()            # the same words as typed, for the unmatched report
     ranges: tuple[Range, ...] = ()
@@ -188,8 +189,26 @@ class Filter:
         """Nothing configured = match NOTHING (never the whole estate)."""
         return bool(
             self.active_patterns or self.labels or self.areas or self.device_classes
-            or self.units or self.values or self.ranges or self.state_for or self.rates
+            or self.units or self.classes or self.values or self.ranges or self.state_for or self.rates
         )
+
+
+def parse_class(v: Any) -> tuple[str | None, str | None] | None:
+    """One `classes` entry → (device_class, unit); either side may be absent.
+
+    ``battery:%`` · ``temperature`` · ``:°F`` · ``{device_class: battery, unit: "%"}``.
+    The device class is case-insensitive, the unit exact — as in `device_classes` / `units`.
+    """
+    if isinstance(v, dict):
+        dc, unit = v.get("device_class"), v.get("unit")
+    else:
+        s = str(v if v is not None else "")
+        dc, _, unit = s.partition(":")
+    dc = str(dc).strip().lower() if dc not in (None, "") and str(dc).strip() else None
+    unit = str(unit).strip() if unit not in (None, "") and str(unit).strip() else None
+    if dc is None and unit is None:
+        return None
+    return dc, unit
 
 
 def parse_filter(config: dict[str, Any] | None) -> Filter:
@@ -236,12 +255,20 @@ def parse_filter(config: dict[str, Any] | None) -> Filter:
             unreadable.append(f"rate_window: {c.get('rate_window')}")
         window = w.seconds if w else max(t.per_seconds for t in rates)
 
+    raw_classes = c.get("classes")
+    if raw_classes is None or raw_classes == "":
+        raw_classes = []
+    elif not isinstance(raw_classes, (list, tuple)):
+        raw_classes = [raw_classes]
+    classes = tuple(p for p in (parse_class(v) for v in raw_classes) if p is not None)
+
     return Filter(
         patterns=patterns,
         labels=tuple(as_list(c.get("labels"))),
         areas=tuple(as_list(c.get("areas"))),
         device_classes=tuple(s.lower() for s in as_list(c.get("device_classes"))),
         units=tuple(as_list(c.get("units"))),
+        classes=classes,
         values=tuple(values),
         value_text=tuple(w for w in as_list(c.get("states")) if parse_range(w) is None and is_number(w) is None),
         ranges=tuple(ranges),

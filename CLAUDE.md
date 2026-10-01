@@ -114,3 +114,12 @@ gone), rule entries with the config entry; HA's ping/pong reaps dead
 connections. The one accumulation was `RateTracker` buffers (entity set
 never shrank). Now `release_all()` when the last rate-bearing subscription
 stops; the next rate filter re-seeds from the recorder.
+
+## 0.5.0 — grammar 4: `classes` pairs (2026-10-01)
+
+`classes: ["battery:%", "temperature", ":°F"]` (or `{device_class, unit}`): an
+entity passes when ANY entry matches, an entry = class (case-insensitive, if
+given) AND unit (exact, if given). Its own category, ANDed with the rest —
+including `device_classes`/`units`, which stay. Why: two independent lists
+admit battery-in-°F; SB Watch's rule form (0.9.0) writes pairs. 8 new vectors
+(69 total); `values()` and the rate scope carry `classes` too.

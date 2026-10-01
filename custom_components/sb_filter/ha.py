@@ -243,7 +243,7 @@ def build_snapshot(hass: HomeAssistant) -> Snapshot:
 
 def _scope_ids(hass: HomeAssistant, flt: Filter) -> list[str]:
     """Entities the filter's non-rate categories select — the ones whose history a rate term needs."""
-    scoped = Filter(patterns=flt.patterns, labels=flt.labels, areas=flt.areas, device_classes=flt.device_classes, units=flt.units,
+    scoped = Filter(patterns=flt.patterns, labels=flt.labels, areas=flt.areas, device_classes=flt.device_classes, units=flt.units, classes=flt.classes,
                     values=flt.values, ranges=flt.ranges, state_for=flt.state_for)
     if scoped.configured:
         ids = list(evaluate(scoped, build_snapshot(hass), dt_util.utcnow()).ids)
@@ -369,7 +369,7 @@ class FilterSubscription:
             "id": self.id,
             "origin": self.origin,
             "matched": len(self._last or ()),
-            "terms": [k for k in ("patterns", "labels", "areas", "device_classes", "units", "states", "state_for", "rate") if self.config.get(k) not in (None, "", [])],
+            "terms": [k for k in ("patterns", "labels", "areas", "device_classes", "units", "classes", "states", "state_for", "rate") if self.config.get(k) not in (None, "", [])],
             "unreadable": len(self.filter.unreadable),
             "started": self.started.isoformat(timespec="seconds"),
             "last_change": self.last_change.isoformat(timespec="seconds") if self.last_change else None,
