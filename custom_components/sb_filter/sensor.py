@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.loader import async_get_integration
 
 from .const import DOMAIN, GRAMMAR_VERSION, SIGNAL_SUBS
-from .ha import live_subscriptions, rate_tracker
+from .ha import live_subscriptions
 
 MAX_LISTED = 40   # ~180 bytes each → well under the recorder's 16 KB attribute cap
 
@@ -51,14 +51,10 @@ class LiveFiltersSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         subs = sorted(live_subscriptions(self._hass).values(), key=lambda s: s.id)
-        data = self._hass.data.get(DOMAIN, {})
         return {
             "grammar": GRAMMAR_VERSION,
             "filters": [s.describe() for s in subs[:MAX_LISTED]],
             "not_listed": max(0, len(subs) - MAX_LISTED),
             "rules": sum(1 for s in subs if s.origin.startswith("rule:")),
             "cards": sum(1 for s in subs if not s.origin.startswith("rule:")),
-            "rate_buffers": len(rate_tracker(self._hass).buffers),
-            "translation_cache": len(data.get("fmt_cache", {})),
-            "vocabulary_cache": len(data.get("vocab_cache", {})),
         }

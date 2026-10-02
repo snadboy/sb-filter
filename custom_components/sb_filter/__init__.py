@@ -1,7 +1,9 @@
-"""SB Filter — the one implementation of the SB entity-filter grammar.
+"""SB Filter — the one implementation of the SB entity-filter grammar:
+WHICH entities (patterns, labels, areas, device class, unit), never their state.
 
-No entities. Consumers: the SB Entity Browser card (WebSocket subscription)
-and SB Watch (imports the matcher directly). See FILTER.md for the grammar.
+One entity (Live filters). Consumers: the SB Entity Browser card (WebSocket
+subscription) and SB Watch (FilterSubscription in-process), which owns every
+question about state. See FILTER.md for the grammar.
 """
 
 from __future__ import annotations

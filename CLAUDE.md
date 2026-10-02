@@ -123,3 +123,23 @@ given) AND unit (exact, if given). Its own category, ANDed with the rest —
 including `device_classes`/`units`, which stay. Why: two independent lists
 admit battery-in-°F; SB Watch's rule form (0.9.0) writes pairs. 8 new vectors
 (69 total); `values()` and the rate scope carry `classes` too.
+
+## 0.6.0 — grammar 5: selection only (2026-10-02)
+
+User decision ("focused purpose"): **SB Filter = which entities, never their
+state.** SB Watch owns every state question and the actions; the Entity Browser
+shows SB Filter's selection OR an SB Watch rule (`rule:`), never both.
+- Removed: `states`/`state_min`/`state_max`/`state_for`/`rate`/`rate_window`,
+  `unmatched_values`, vocabularies/translations, `RateTracker`, `sb_filter/values`,
+  the 30 s / 60 s ticks, the recorder after-dependency. A pattern token no longer
+  matches a state exactly (ids + names only).
+- A config still carrying a state key selects NOTHING, stays `configured`, and
+  lists each key in `unreadable` — old clients get an empty list, not a silently
+  widened one.
+- `FilterSubscription` listens to state_changed with an `event_filter`
+  (`selection_moved`: entity added/removed, or friendly_name / device_class /
+  unit changed — HA passes the event DATA to the filter) + the 4 registry events.
+- The state vectors were PORTED to sb-watch first (`tools/port_vectors.py` there,
+  run against grammar 4: 42/42 reproduced) — then removed here. 28 vectors now.
+- Live check after the switch: every rule's selection count identical
+  (66/6/76/11/1×5), `binary_sensor.` = 283 = an independent tally of the states.

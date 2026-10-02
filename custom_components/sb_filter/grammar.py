@@ -1,6 +1,7 @@
 """The SB filter grammar: parsing only, no Home Assistant imports.
 
-One filter = patterns ∧ labels ∧ areas ∧ device_classes ∧ units ∧ states ∧ state_for.
+One filter = patterns ∧ labels ∧ areas ∧ device_classes ∧ units ∧ classes —
+WHICH entities, never what state they are in (that is SB Watch's job).
 Within a category any entry matches (OR); every configured category must be
 satisfied (AND); an empty category does not constrain. See FILTER.md.
 """
@@ -8,15 +9,14 @@ satisfied (AND); an empty category does not constrain. See FILTER.md.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 PLACEHOLDER_PREFIX = "___"   # HA pickers emit "___no_items_available___" for an empty list
-
-_RANGE_RX = re.compile(r"^(?:(<=|<|>=|>)\s*(-?\d+(?:\.\d+)?)|(-?\d+(?:\.\d+)?)\s*(?:\.\.|-)\s*(-?\d+(?:\.\d+)?))$")
-_DUR_RX = re.compile(r"^(<=|<|>=|>)?\s*((?:\d+(?:\.\d+)?\s*[dhms]\s*)+|\d+(?:\.\d+)?)$", re.I)
-_DUR_PART = re.compile(r"([\d.]+)([dhms])", re.I)
-_UNIT_SECS = {"d": 86400, "h": 3600, "m": 60, "s": 1}
+# Grammar 4 also judged state. A config that still carries one of these selects
+# NOTHING and says why: silently widening "batteries under 20 %" to every
+# battery would be worse than an empty list.
+STATE_KEYS = ("states", "state_min", "state_max", "state_for", "rate", "rate_window")
 
 
 def as_list(v: Any) -> list[str]:
@@ -42,14 +42,8 @@ def glob_to_regex(glob: str) -> re.Pattern:
 
 
 @dataclass(frozen=True)
-class Token:
-    regex: re.Pattern
-    exact: str | None      # lower-cased token when it carries no wildcard: may equal a state exactly
-
-
-@dataclass(frozen=True)
 class Pattern:
-    tokens: tuple[Token, ...]   # every token must match (AND), each anywhere in id or name, or a state exactly
+    tokens: tuple[re.Pattern, ...]   # every token must match (AND), each anywhere in the id or the friendly name
 
 
 def parse_pattern(p: Any) -> Pattern | None:
@@ -59,109 +53,7 @@ def parse_pattern(p: Any) -> Pattern | None:
     s = str(p).strip()
     if not s:
         return None
-    toks = tuple(
-        Token(regex=glob_to_regex(t), exact=None if ("*" in t or "?" in t) else t.lower())
-        for t in s.split()
-    )
-    return Pattern(tokens=toks)
-
-
-@dataclass(frozen=True)
-class Range:
-    lo: float | None = None
-    hi: float | None = None
-    lo_open: bool = False   # True: strictly greater than lo
-    hi_open: bool = False   # True: strictly less than hi
-
-    def contains(self, n: float) -> bool:
-        if self.lo is not None and (n <= self.lo if self.lo_open else n < self.lo):
-            return False
-        if self.hi is not None and (n >= self.hi if self.hi_open else n > self.hi):
-            return False
-        return True
-
-
-def parse_range(s: Any) -> Range | None:
-    """``<20 <=20 >80 >=80 20-50 20..50``; a span is inclusive and may be written either way round."""
-    m = _RANGE_RX.match(str(s).strip())
-    if not m:
-        return None
-    if m.group(3) is not None:
-        a, b = float(m.group(3)), float(m.group(4))
-        return Range(lo=min(a, b), hi=max(a, b))
-    n = float(m.group(2))
-    return {
-        "<": Range(hi=n, hi_open=True),
-        "<=": Range(hi=n),
-        ">": Range(lo=n, lo_open=True),
-        ">=": Range(lo=n),
-    }[m.group(1)]
-
-
-@dataclass(frozen=True)
-class Duration:
-    op: str        # < <= > >=
-    seconds: float
-
-    def holds(self, age_seconds: float) -> bool:
-        return {
-            "<": age_seconds < self.seconds,
-            "<=": age_seconds <= self.seconds,
-            ">": age_seconds > self.seconds,
-            ">=": age_seconds >= self.seconds,
-        }[self.op]
-
-
-def parse_duration(v: Any) -> Duration | None:
-    """``2h`` / ``>=2h`` at least; ``<5m`` within; d h m s combine (``1h30m``); a bare number is MINUTES."""
-    if v is None or v == "":
-        return None
-    m = _DUR_RX.match(str(v).strip())
-    if not m:
-        return None
-    body = re.sub(r"\s+", "", m.group(2))
-    if re.fullmatch(r"[\d.]+", body):
-        secs = float(body) * 60
-    else:
-        secs = sum(float(n) * _UNIT_SECS[u.lower()] for n, u in _DUR_PART.findall(body))
-    return Duration(op=m.group(1) or ">=", seconds=secs)
-
-
-_RATE_RX = re.compile(r"^(<=|<|>=|>)\s*(-?\d+(?:\.\d+)?)\s*/\s*([mhd])$", re.I)
-
-
-@dataclass(frozen=True)
-class RateTerm:
-    op: str            # < <= > >=
-    value: float       # in units per `per`
-    per: str           # m h d
-    per_seconds: float
-
-    def holds(self, per_second: float) -> bool:
-        r = per_second * self.per_seconds
-        return {"<": r < self.value, "<=": r <= self.value, ">": r > self.value, ">=": r >= self.value}[self.op]
-
-
-def parse_rate(v: Any) -> RateTerm | None:
-    """``>0.5/h`` ``<-2/h`` ``>=1/m`` ``<0.1/d`` — change per minute/hour/day; comparator required."""
-    if v is None or v == "":
-        return None
-    m = _RATE_RX.match(str(v).strip())
-    if not m:
-        return None
-    per = m.group(3).lower()
-    return RateTerm(op=m.group(1), value=float(m.group(2)), per=per, per_seconds=_UNIT_SECS[per])
-
-
-def is_number(s: Any) -> float | None:
-    """The float value of a numeric state, else None (``inf``/``nan`` are not states we range over)."""
-    try:
-        n = float(str(s).strip())
-    except (TypeError, ValueError):
-        return None
-    if n != n or n in (float("inf"), float("-inf")):
-        return None
-    return n
+    return Pattern(tokens=tuple(glob_to_regex(t) for t in s.split()))
 
 
 @dataclass(frozen=True)
@@ -172,13 +64,8 @@ class Filter:
     device_classes: tuple[str, ...] = ()        # lower-cased
     units: tuple[str, ...] = ()                 # exact
     classes: tuple[tuple[str | None, str | None], ...] = ()   # (device_class lower | None, unit | None) PAIRS, ORed
-    values: tuple[str, ...] = ()                # lower-cased WORD values (raw or translated); numbers became ranges
-    value_text: tuple[str, ...] = ()            # the same words as typed, for the unmatched report
-    ranges: tuple[Range, ...] = ()
-    state_for: Duration | None = None
-    rates: tuple[RateTerm, ...] = ()            # ORed; only numeric states have a rate
-    rate_window: float | None = None            # seconds; default = the largest unit among the terms
-    unreadable: tuple[str, ...] = ()            # things we could not parse, for the editor to show
+    state_keys: tuple[str, ...] = ()            # grammar-4 state keys present: the filter selects nothing
+    unreadable: tuple[str, ...] = ()            # things we could not use, for the editor to show
 
     @property
     def active_patterns(self) -> int:
@@ -187,10 +74,8 @@ class Filter:
     @property
     def configured(self) -> bool:
         """Nothing configured = match NOTHING (never the whole estate)."""
-        return bool(
-            self.active_patterns or self.labels or self.areas or self.device_classes
-            or self.units or self.classes or self.values or self.ranges or self.state_for or self.rates
-        )
+        return bool(self.active_patterns or self.labels or self.areas or self.device_classes
+                    or self.units or self.classes or self.state_keys)
 
 
 def parse_class(v: Any) -> tuple[str | None, str | None] | None:
@@ -212,68 +97,28 @@ def parse_class(v: Any) -> tuple[str | None, str | None] | None:
 
 
 def parse_filter(config: dict[str, Any] | None) -> Filter:
-    """Parse a card / rule config into a Filter. Unknown keys are ignored."""
+    """Parse a card / rule config into a Filter. Unknown keys are ignored; state keys are refused."""
     c = config or {}
-    unreadable: list[str] = []
     raw_patterns = c.get("patterns")
     if raw_patterns is None:
         raw_patterns = []
     elif not isinstance(raw_patterns, (list, tuple)):
         raw_patterns = [raw_patterns]
-    patterns = tuple(parse_pattern(p) for p in raw_patterns)
-
-    values: list[str] = []
-    ranges: list[Range] = []
-    for s in as_list(c.get("states")):
-        r = parse_range(s)
-        n = is_number(s) if r is None else None
-        if r:
-            ranges.append(r)
-        elif n is not None:
-            ranges.append(Range(lo=n, hi=n))          # v2: a plain number is numeric EQUALITY
-        else:
-            values.append(s.lower())
-    lo, hi = is_number(c.get("state_min")), is_number(c.get("state_max"))
-    if lo is not None or hi is not None:
-        ranges.append(Range(lo=lo, hi=hi))
-
-    dur = parse_duration(c.get("state_for"))
-    if c.get("state_for") not in (None, "") and dur is None:
-        unreadable.append(f"state_for: {c.get('state_for')}")
-
-    rates: list[RateTerm] = []
-    for r in as_list(c.get("rate")):
-        term = parse_rate(r)
-        if term:
-            rates.append(term)
-        else:
-            unreadable.append(f"rate: {r}")
-    window = None
-    if rates:
-        w = parse_duration(c.get("rate_window"))
-        if c.get("rate_window") not in (None, "") and w is None:
-            unreadable.append(f"rate_window: {c.get('rate_window')}")
-        window = w.seconds if w else max(t.per_seconds for t in rates)
 
     raw_classes = c.get("classes")
     if raw_classes is None or raw_classes == "":
         raw_classes = []
     elif not isinstance(raw_classes, (list, tuple)):
         raw_classes = [raw_classes]
-    classes = tuple(p for p in (parse_class(v) for v in raw_classes) if p is not None)
 
+    state_keys = tuple(k for k in STATE_KEYS if c.get(k) not in (None, "", []))
     return Filter(
-        patterns=patterns,
+        patterns=tuple(parse_pattern(p) for p in raw_patterns),
         labels=tuple(as_list(c.get("labels"))),
         areas=tuple(as_list(c.get("areas"))),
         device_classes=tuple(s.lower() for s in as_list(c.get("device_classes"))),
         units=tuple(as_list(c.get("units"))),
-        classes=classes,
-        values=tuple(values),
-        value_text=tuple(w for w in as_list(c.get("states")) if parse_range(w) is None and is_number(w) is None),
-        ranges=tuple(ranges),
-        state_for=dur,
-        rates=tuple(rates),
-        rate_window=window,
-        unreadable=tuple(unreadable),
+        classes=tuple(p for p in (parse_class(v) for v in raw_classes) if p is not None),
+        state_keys=state_keys,
+        unreadable=tuple(f"{k}: state conditions belong to SB Watch (grammar 5)" for k in state_keys),
     )
