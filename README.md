@@ -41,6 +41,13 @@ ids in `entity_ids` (not recorded; the count is). SB Watch rules and SB Entity
 Browser cards **pick** a filter (or list individual entities) instead of writing
 their own selection, so editing a filter updates every rule and card that uses it.
 
+**The SB Filter page** (sidebar, admins; `/sb-filter`) lists every filter with its
+live count, what it selects, and **what uses it** — SB Watch rules (reported by SB
+Watch) and dashboard cards (found by reading every dashboard; a Param Card template
+such as `sensor.demo_fp300_$value$_filter` is expanded from its choices). New / Edit
+open the shared dialog; Delete names everything that would lose its filter first.
+Deep links: `/sb-filter?edit=<entry_id>`, `?add=1`.
+
 Make or edit one:
 - **the shared dialog** — *New filter…* / *Edit filter…* buttons in the SB Watch
   panel, the SB Watch Card's editor and the SB Entity Browser's editor all open
@@ -67,6 +74,7 @@ filter. Integrations that depend on it list `sb_filter` in their manifest.
 | `sb_filter/match` | `config` | `{ids, pattern_counts, configured, unreadable, grammar}` |
 | `sb_filter/subscribe` | `config` | the same payload as an event, first immediately and then whenever `ids` change |
 | `sb_filter/filters` | — | every named filter: `{entry_id, name, entity_id, selection, count}` |
+| `sb_filter/usage` | — | `{filter_entry_id: [{kind, name, url}]}` from the integrations that reference filters (`named.register_usage`) |
 | `sb_filter/info` | — | `{grammar, version, dialog_url}` — `dialog_url` is the shared filter dialog |
 
 A selection recomputes on registry edits and on state changes that add or remove

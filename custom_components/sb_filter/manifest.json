@@ -7,12 +7,14 @@
   "config_flow": true,
   "dependencies": [
     "websocket_api",
-    "http"
+    "http",
+    "frontend",
+    "panel_custom"
   ],
   "documentation": "https://github.com/snadboy/sb-filter",
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/snadboy/sb-filter/issues",
   "requirements": [],
-  "version": "0.7.1"
+  "version": "0.8.0"
 }

@@ -11,7 +11,7 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, GRAMMAR_VERSION, STATIC_URL
 from .ha import FilterSubscription, match_now, result_payload
-from .named import filter_entries, named_filters, selection_of
+from .named import filter_entries, named_filters, selection_of, usage
 
 
 @websocket_api.websocket_command({vol.Required("type"): "sb_filter/match", vol.Required("config"): dict})
@@ -60,9 +60,17 @@ def ws_filters(hass: HomeAssistant, connection: websocket_api.ActiveConnection, 
     connection.send_result(msg["id"], {"filters": sorted(out, key=lambda f: f["name"].lower())})
 
 
+@websocket_api.websocket_command({vol.Required("type"): "sb_filter/usage"})
+@callback
+def ws_usage(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """What uses each named filter, as reported by the integrations that reference them (SB Watch rules)."""
+    connection.send_result(msg["id"], {"usage": usage(hass)})
+
+
 @callback
 def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_match)
     websocket_api.async_register_command(hass, ws_subscribe)
     websocket_api.async_register_command(hass, ws_info)
     websocket_api.async_register_command(hass, ws_filters)
+    websocket_api.async_register_command(hass, ws_usage)

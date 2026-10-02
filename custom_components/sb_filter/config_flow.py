@@ -61,6 +61,9 @@ def _validate(hass, opts: dict[str, Any], own_entry_id: str | None) -> dict[str,
     return {}
 
 
+PANEL_ADD = "[Open the SB Filter page](/sb-filter?add=1) — every filter, what uses it, and the same form with a live list."
+
+
 def _live(hass, opts: dict[str, Any]) -> dict[str, str]:
     sel = selection_of(opts)
     if not sel:
@@ -106,7 +109,7 @@ class SbFilterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=opts["name"], data={"kind": KIND_FILTER}, options=opts)
             shown = opts
         return self.async_show_form(step_id="user", data_schema=_schema(shown), errors=errors,
-                                    description_placeholders=_live(self.hass, shown))
+                                    description_placeholders={**_live(self.hass, shown), "panel": PANEL_ADD})
 
     @staticmethod
     @callback
@@ -134,4 +137,5 @@ class SbFilterOptionsFlow(config_entries.OptionsFlow):
                 return self.async_create_entry(title="", data=opts)
             shown = opts
         return self.async_show_form(step_id="init", data_schema=_schema(shown), errors=errors,
-                                    description_placeholders=_live(self.hass, shown))
+                                    description_placeholders={**_live(self.hass, shown),
+                                                              "panel": f"[Open the SB Filter page](/sb-filter?edit={entry.entry_id}) — every filter, what uses it, and a live list of what this one selects."})

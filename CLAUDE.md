@@ -178,3 +178,25 @@ User asked whether three cards on one filter see an edit at once. Measured: yes,
 Now the update listener calls `NamedFilter.update(entry)` (new FilterSubscription
 started, old stopped, device renamed via the device registry); measured 15 → 16 →
 15 with no unavailable step.
+
+## 0.8.0 — the SB Filter sidebar page (2026-10-02)
+
+User asked why SB Filter had no sidebar (answer: it had nothing to manage until named
+filters; the real gap was "what uses a filter") → "Build the SB Filter sidebar page".
+- `frontend/sb-filter-panel.js` (hand-written, NOT generated), `panel_custom` at
+  `/sb-filter` (admins), registered in `async_setup` after the static path.
+- Rows: name, selection, live count (from the sensors), "N rules · M cards"; click =
+  details (users with links, the selected names, the sensor id); New / Edit = the
+  shared dialog; Delete = a confirm that lists every user.
+- Users: rules via `named.register_usage(hass, source, provider)` — SB Watch
+  registers one (0.13.2), SB Filter never reads another integration's options;
+  cards by scanning every dashboard (`lovelace/dashboards/list` + `lovelace/config`)
+  for sb-entity-browser `filter:`. Param Card TEMPLATES are expanded from the
+  wrapping Param Card's choices (first cut used `.+` and counted
+  `sensor.$kind$_filter` as using EVERY filter — caught by the test); unknown
+  choices fall back to `[a-z0-9_]+`.
+- The dialog now carries `loadHaForm` (Lovelace via partial-panel-resolver) and the
+  page preloads it — a cold page needed ~7 s before the first dialog otherwise.
+- The native add/edit forms link to the page (`{panel}` placeholder).
+- Verified headless, cold: 33 rows, counts, users, delete warning (cancelled),
+  create + delete of a throwaway filter, deep link.

@@ -7,7 +7,7 @@
       },
       "user": {
         "title": "New filter",
-        "description": "A named filter selects entities: which ones, never what state they are in. SB Watch rules and SB Entity Browser cards pick it by name. Every filled field must match; within a field, any entry matches.\n\n{count}",
+        "description": "{panel}\n\nA named filter selects entities: which ones, never what state they are in. SB Watch rules and SB Entity Browser cards pick it by name. Every filled field must match; within a field, any entry matches.\n\n{count}",
         "data": {
           "name": "Name",
           "patterns": "Patterns",
@@ -39,7 +39,7 @@
     "step": {
       "init": {
         "title": "Edit filter",
-        "description": "Every SB Watch rule and SB Entity Browser card that picks this filter follows the change.\n\n{count}",
+        "description": "{panel}\n\nEvery SB Watch rule and SB Entity Browser card that picks this filter follows the change.\n\n{count}",
         "data": {
           "name": "Name",
           "patterns": "Patterns",

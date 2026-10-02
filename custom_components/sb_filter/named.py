@@ -164,3 +164,33 @@ async def async_find_or_create(hass: HomeAssistant, name: str, selection: dict[s
     if res.get("type") != "create_entry":
         raise ValueError(f"could not create filter {name!r}: {res.get('reason') or res.get('errors')}")
     return res["result"].entry_id
+
+
+# ---- who uses a filter ------------------------------------------------------------
+# Integrations that reference named filters (SB Watch) register a provider; SB Filter
+# never reads another integration's settings. A provider returns
+#   {filter_entry_id: [{"kind": "SB Watch rule", "name": …, "url": …}, …]}
+# Dashboard cards are found by the panel itself (it can read every dashboard).
+
+
+@callback
+def register_usage(hass: HomeAssistant, source: str, provider: Callable[[], dict[str, list[dict[str, Any]]]]) -> CALLBACK_TYPE:
+    _data(hass).setdefault("usage", {})[source] = provider
+
+    @callback
+    def _unregister() -> None:
+        _data(hass).get("usage", {}).pop(source, None)
+    return _unregister
+
+
+@callback
+def usage(hass: HomeAssistant) -> dict[str, list[dict[str, Any]]]:
+    out: dict[str, list[dict[str, Any]]] = {}
+    for provider in list(_data(hass).get("usage", {}).values()):
+        try:
+            found = provider() or {}
+        except Exception:  # noqa: BLE001 — one broken provider must not hide the others
+            continue
+        for fid, users in found.items():
+            out.setdefault(fid, []).extend(users)
+    return out

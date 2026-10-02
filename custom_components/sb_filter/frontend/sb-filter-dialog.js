@@ -15,7 +15,7 @@
  */
 (() => {
   if (window.sbFilterDialog) return;
-  const VERSION = "0.7.1";
+  const VERSION = "0.8.0";
   const COMMON_CLASSES = ["battery:%", "temperature", "temperature:°F", "humidity:%", "illuminance:lx", "power:W", "energy:kWh",
     "occupancy", "motion", "door", "window", "moisture", "problem", "connectivity"];
   const ERRORS = { no_name: "Give the filter a name.", name_taken: "Another filter already has this name.",
@@ -48,6 +48,28 @@
   const list = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : String(v).split(",")).map((s) => String(s).trim()).filter(Boolean);
   const selectionOf = (d) => { const o = {}; for (const k of ["patterns", "areas", "labels", "classes"]) { const v = list(d[k]); if (v.length) o[k] = v; } return o; };
 
+  // HA's form element is loaded lazily, with Lovelace. On a page opened cold (the SB Filter
+  // or SB Watch sidebar page) neither is there yet: HA's own panel resolver can load Lovelace,
+  // and an entities card's config element brings ha-form with it.
+  async function loadHaForm() {
+    if (customElements.get("ha-form")) return true;
+    try {
+      if (!window.loadCardHelpers) {
+        await customElements.whenDefined("partial-panel-resolver");
+        const ppr = document.createElement("partial-panel-resolver");
+        ppr.hass = { panels: [{ url_path: "tmp", component_name: "lovelace" }] };
+        ppr._updateRoutes();
+        await ppr.routerOptions.routes.tmp.load();
+      }
+      const helpers = await window.loadCardHelpers();
+      helpers.createCardElement({ type: "entities", entities: [] });
+      await Promise.race([customElements.whenDefined("hui-entities-card"), new Promise((r) => setTimeout(r, 5000))]);
+      const C = customElements.get("hui-entities-card");
+      if (C?.getConfigElement) await C.getConfigElement();
+    } catch (e) { /* reported by the caller */ }
+    return !!customElements.get("ha-form");
+  }
+
   async function entityIdFor(hass, entryId) {
     for (let i = 0; i < 20; i++) {
       const r = await hass.connection.sendMessagePromise({ type: "sb_filter/filters" });
@@ -74,8 +96,8 @@
   }
 
   function open({ hass, host, entryId = null, initial = {} }) {
-    return new Promise(async (resolve) => {
-      await Promise.race([customElements.whenDefined("ha-form"), new Promise((r) => setTimeout(r, 4000))]);
+    return new Promise(async (resolve, reject) => {
+      if (!(await loadHaForm())) { reject(new Error("Home Assistant's form controls did not load — reload the page")); return; }
       let data = { name: initial.name || "", patterns: list(initial.patterns), areas: list(initial.areas), labels: list(initial.labels), classes: list(initial.classes) };
       if (entryId) {
         const r = await hass.connection.sendMessagePromise({ type: "sb_filter/filters" });
@@ -150,5 +172,5 @@
     });
   }
 
-  window.sbFilterDialog = { open, version: VERSION };
+  window.sbFilterDialog = { open, loadHaForm, version: VERSION };
 })();
