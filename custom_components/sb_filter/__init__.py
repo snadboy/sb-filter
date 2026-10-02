@@ -1,41 +1,76 @@
 """SB Filter — the one implementation of the SB entity-filter grammar:
 WHICH entities (patterns, labels, areas, device class, unit), never their state.
 
-One entity (Live filters). Consumers: the SB Entity Browser card (WebSocket
-subscription) and SB Watch (FilterSubscription in-process), which owns every
-question about state. See FILTER.md for the grammar.
+Two kinds of config entry:
+  - the engine (one, no options): the WebSocket API and sensor.sb_filter_live_filters;
+  - a NAMED FILTER (data {"kind": "filter"}): a selection with a name and a sensor,
+    picked by SB Watch rules and SB Entity Browser cards — the one place selections
+    are made. Added from Integrations → SB Filter → Add entry, or the shared
+    "Add filter" dialog (frontend/sb-filter-dialog.js) the cards and the SB Watch
+    panel open. See named.py and FILTER.md.
 """
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
+
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.loader import async_get_integration
 
-from .const import DOMAIN
+from .const import DOMAIN, STATIC_URL
+from .named import NamedFilter, is_filter_entry, notify_removed
 from .websocket import async_register
 
 __all__ = ["DOMAIN"]
-
-
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the WebSocket API once, whether we are set up by a config entry
-    or pulled in as another integration's dependency."""
-    data = hass.data.setdefault(DOMAIN, {})
-    if not data.get("ws_registered"):
-        async_register(hass)
-        data["ws_registered"] = True
-    return True
-
-
+_LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SENSOR]
 
 
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the WebSocket API and the dialog's static path once, whether we are set
+    up by a config entry or pulled in as another integration's dependency."""
+    data = hass.data.setdefault(DOMAIN, {})
+    integration = await async_get_integration(hass, DOMAIN)
+    data["version"] = str(integration.version) if integration.version else "0"
+    if not data.get("ws_registered"):
+        async_register(hass)
+        data["ws_registered"] = True
+        try:
+            await hass.http.async_register_static_paths(
+                [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend"), False)])
+        except Exception:  # noqa: BLE001 — the dialog is a convenience; filters work without it
+            _LOGGER.exception("SB Filter: could not serve the filter dialog")
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if is_filter_entry(entry):
+        nf = NamedFilter(hass, entry)
+        entry.runtime_data = nf
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        nf.start()
+        entry.async_on_unload(entry.add_update_listener(_async_reload))
+        return True
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
+async def _async_reload(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if is_filter_entry(entry) and isinstance(getattr(entry, "runtime_data", None), NamedFilter):
+        entry.runtime_data.stop()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """A named filter was deleted: whoever follows it now selects nothing, and says why."""
+    if is_filter_entry(entry):
+        notify_removed(hass, entry.entry_id)

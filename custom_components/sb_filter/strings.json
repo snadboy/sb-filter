@@ -1,13 +1,67 @@
 {
   "config": {
     "step": {
-      "user": {
+      "engine": {
         "title": "SB Filter",
-        "description": "Installs the SB entity-filter engine used by SB Entity Browser and SB Watch. Nothing to configure."
+        "description": "Installs the SB entity-filter engine used by SB Entity Browser and SB Watch. Nothing to configure. Afterwards, Add entry creates a named filter."
+      },
+      "user": {
+        "title": "New filter",
+        "description": "A named filter selects entities: which ones, never what state they are in. SB Watch rules and SB Entity Browser cards pick it by name. Every filled field must match; within a field, any entry matches.\n\n{count}",
+        "data": {
+          "name": "Name",
+          "patterns": "Patterns",
+          "areas": "Areas",
+          "labels": "Labels",
+          "classes": "Device class · unit"
+        },
+        "data_description": {
+          "patterns": "Words match the entity id or friendly name, any order, case-insensitive; * and ? wildcards. Words in one pattern must all match.",
+          "areas": "The entity's area, else its device's.",
+          "labels": "The entity's own labels or its device's.",
+          "classes": "class:unit pairs — battery:%, temperature, :°F (either side optional)."
+        }
       }
     },
+    "error": {
+      "no_name": "Give the filter a name.",
+      "name_taken": "Another filter already has this name.",
+      "empty": "Fill at least one field — a filter that selects nothing is no filter."
+    },
     "abort": {
-      "already_configured": "SB Filter is already set up."
+      "already_configured": "SB Filter is already set up.",
+      "no_name": "A filter needs a name.",
+      "name_taken": "A filter with this name exists.",
+      "empty": "That filter selects nothing."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Edit filter",
+        "description": "Every SB Watch rule and SB Entity Browser card that picks this filter follows the change.\n\n{count}",
+        "data": {
+          "name": "Name",
+          "patterns": "Patterns",
+          "areas": "Areas",
+          "labels": "Labels",
+          "classes": "Device class · unit"
+        },
+        "data_description": {
+          "patterns": "Words match the entity id or friendly name, any order, case-insensitive; * and ? wildcards. Words in one pattern must all match.",
+          "areas": "The entity's area, else its device's.",
+          "labels": "The entity's own labels or its device's.",
+          "classes": "class:unit pairs — battery:%, temperature, :°F (either side optional)."
+        }
+      }
+    },
+    "error": {
+      "no_name": "Give the filter a name.",
+      "name_taken": "Another filter already has this name.",
+      "empty": "Fill at least one field — a filter that selects nothing is no filter."
+    },
+    "abort": {
+      "engine": "The SB Filter engine has nothing to configure; edit a named filter instead."
     }
   }
 }

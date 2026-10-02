@@ -51,7 +51,10 @@ def build_snapshot(hass: HomeAssistant) -> Snapshot:
     """Plain data for the pure matcher."""
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
-    states = {s.entity_id: StateRow(attributes=s.attributes) for s in hass.states.async_all()}
+    # SB Filter's own sensors are never selected: a filter named "Occupancy sensors"
+    # would otherwise match its own sensor ("Occupancy sensors Filter").
+    own = {e.entity_id for e in ent_reg.entities.values() if e.platform == DOMAIN}
+    states = {s.entity_id: StateRow(attributes=s.attributes) for s in hass.states.async_all() if s.entity_id not in own}
     entities = {
         e.entity_id: EntityRow(device_id=e.device_id, area_id=e.area_id, labels=tuple(e.labels))
         for e in ent_reg.entities.values()

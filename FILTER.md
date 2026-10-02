@@ -16,7 +16,9 @@ classes: ["battery:%", temperature, ":°F"]   # device class AND unit as PAIRS, 
 **Across categories: AND.** Every category that is configured must be satisfied.
 An empty category does not constrain. **Within a category: OR.**
 
-**Nothing configured matches nothing** — never the whole estate.
+**Nothing configured matches nothing** — never the whole estate. SB Filter's own
+sensors (a named filter's `sensor.<name>_filter`, the Live filters sensor) are never
+selected.
 
 ## What a filter is not
 

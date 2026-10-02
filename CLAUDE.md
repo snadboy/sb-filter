@@ -143,3 +143,30 @@ shows SB Filter's selection OR an SB Watch rule (`rule:`), never both.
   run against grammar 4: 42/42 reproduced) — then removed here. 28 vectors now.
 - Live check after the switch: every rule's selection count identical
   (66/6/76/11/1×5), `binary_sensor.` = 283 = an independent tally of the states.
+
+## 0.7.0 — named filters (2026-10-02)
+
+User: "do we want multiple paths creating filters?" → no. **Named filters, made in
+ONE place (SB Filter); rules and cards pick a filter (or create one via a button
+that opens the add-filter dialog) or individual entities.**
+- Entries: the ENGINE (unique_id `sb_filter`, data {}) + one entry per NAMED
+  FILTER (data `{"kind": "filter"}`, options {name, patterns, areas, labels,
+  classes}). `single_config_entry` dropped; the user step creates the engine when
+  none exists, else a filter; `async_step_import` (SB Watch's migration);
+  options flow edits a filter; `async_supports_options_flow` hides Configure on the
+  engine. Validation: name required + unique (case-insensitive), selection configured.
+- `named.py`: `NamedFilter` (a FilterSubscription, origin "filter: <name>"),
+  `async_listen(hass, entry_id, cb)` — the listener registry OUTLIVES the entry, so
+  an edit (= reload) hands followers the new ids with no gap; nothing is sent on
+  unload, `missing` only on removal (`async_remove_entry`). `async_find_or_create`
+  (dedupe by exact selection, unique name by suffix).
+- `sensor.<name>_filter` (`FilterSensor`): state = count, `entity_ids`
+  (`_unrecorded_attributes`), `selection`, `filter_id`.
+- WS `sb_filter/filters`; `sb_filter/info` → `dialog_url`.
+- `frontend/sb-filter-dialog.js` (static `/sb_filter_static`): THE add/edit dialog
+  — `window.sbFilterDialog.open({hass, host, entryId?, initial?})` → {entry_id,
+  entity_id, name} | null. ha-form fields, live count + names via `sb_filter/match`,
+  posts the config/options flow over REST. `host` must be inside HA's app tree.
+- **Self-reference bug found live:** "Occupancy sensors Filter" matched its own
+  pattern "Occupancy sensor" (17 → 18). `build_snapshot` now skips every entity of
+  platform `sb_filter`. Verified 17 / 25 after the restart.
