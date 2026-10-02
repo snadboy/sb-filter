@@ -170,3 +170,11 @@ that opens the add-filter dialog) or individual entities.**
 - **Self-reference bug found live:** "Occupancy sensors Filter" matched its own
   pattern "Occupancy sensor" (17 → 18). `build_snapshot` now skips every entity of
   platform `sb_filter`. Verified 17 / 25 after the restart.
+
+## 0.7.1 — an edit updates the filter IN PLACE (2026-10-02)
+
+User asked whether three cards on one filter see an edit at once. Measured: yes,
+0.08 s — but the entry RELOAD blanked the sensor (unavailable, 0 ids) on the way.
+Now the update listener calls `NamedFilter.update(entry)` (new FilterSubscription
+started, old stopped, device renamed via the device registry); measured 15 → 16 →
+15 with no unavailable step.

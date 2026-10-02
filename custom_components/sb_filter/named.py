@@ -78,6 +78,17 @@ class NamedFilter:
             named_filters(self.hass).pop(self.entry_id)
 
     @callback
+    def update(self, entry: ConfigEntry) -> None:
+        """An edit: swap the selection IN PLACE — no reload, so the sensor never
+        passes through unavailable / zero entities on its way to the new set."""
+        self.name = entry.options.get("name") or entry.title
+        self.selection = selection_of(entry.options)
+        old = self._sub
+        self._sub = FilterSubscription(self.hass, self.selection, self._on, origin=f"filter: {self.name}")
+        self._sub.start()                       # pushes the new ids straight away
+        old.stop()
+
+    @callback
     def add_entity_listener(self, cb: Callable[[], None]) -> CALLBACK_TYPE:
         self._entity_cbs.append(cb)
         return lambda: self._entity_cbs.remove(cb)

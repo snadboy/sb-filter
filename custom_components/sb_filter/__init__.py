@@ -19,6 +19,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
@@ -61,7 +62,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_reload(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    await hass.config_entries.async_reload(entry.entry_id)
+    """A filter was edited: update it in place (a reload would blank its sensor for a moment)."""
+    nf = getattr(entry, "runtime_data", None)
+    if not isinstance(nf, NamedFilter):
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
+    nf.update(entry)
+    dev_reg = dr.async_get(hass)
+    if (dev := dev_reg.async_get_device(identifiers={(DOMAIN, entry.entry_id)})) is not None and dev.name != nf.name:
+        dev_reg.async_update_device(dev.id, name=nf.name)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

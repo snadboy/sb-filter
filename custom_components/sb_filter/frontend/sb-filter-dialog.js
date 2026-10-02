@@ -15,7 +15,7 @@
  */
 (() => {
   if (window.sbFilterDialog) return;
-  const VERSION = "0.7.0";
+  const VERSION = "0.7.1";
   const COMMON_CLASSES = ["battery:%", "temperature", "temperature:°F", "humidity:%", "illuminance:lx", "power:W", "energy:kWh",
     "occupancy", "motion", "door", "window", "moisture", "problem", "connectivity"];
   const ERRORS = { no_name: "Give the filter a name.", name_taken: "Another filter already has this name.",
